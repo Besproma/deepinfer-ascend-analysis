@@ -1,4 +1,4 @@
-> 完整交互版：{{GITHUB_PAGES_URL}}
+> 完整交互版：https://besproma.github.io/deepinfer-ascend-analysis/
 >
 > 代码快照：`774ce24`  
 > 分析日期：2026-10-21  

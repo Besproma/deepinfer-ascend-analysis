@@ -20,7 +20,7 @@
 发布后的入口为：
 
 ```text
-https://<github-username>.github.io/<repository-name>/
+https://besproma.github.io/deepinfer-ascend-analysis/
 ```
 
 ## 数据说明
