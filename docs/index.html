@@ -1,0 +1,3424 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>DeepInfer 昇腾适配与计算架构分析</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --paper: #f7f5ef;
+      --paper-deep: #eeece4;
+      --surface: #fffef9;
+      --ink: #1c2726;
+      --ink-soft: #51605e;
+      --ink-faint: #7a8784;
+      --line: #d8d8cf;
+      --line-strong: #b9beb7;
+      --teal: #0e6b61;
+      --teal-soft: #dcece8;
+      --teal-dark: #084a43;
+      --amber: #a96d16;
+      --amber-soft: #f5e9d2;
+      --brick: #a34735;
+      --brick-soft: #f2dfda;
+      --blue: #315f87;
+      --blue-soft: #e1eaf2;
+      --shadow: 0 18px 50px rgba(31, 45, 42, 0.08);
+      --radius: 8px;
+      --content: 1180px;
+    }
+
+    * {
+      box-sizing: border-box;
+      letter-spacing: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--paper);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(14, 107, 97, 0.035) 1px, transparent 1px),
+        linear-gradient(rgba(14, 107, 97, 0.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      font-family: "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--teal);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover {
+      color: var(--teal-dark);
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .progress-line {
+      position: fixed;
+      z-index: 80;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 3px;
+      background: var(--teal);
+    }
+
+    .topbar {
+      position: sticky;
+      z-index: 60;
+      top: 0;
+      display: flex;
+      min-height: 56px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 10px max(24px, calc((100vw - var(--content)) / 2));
+      border-bottom: 1px solid rgba(185, 190, 183, 0.8);
+      background: rgba(247, 245, 239, 0.94);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink);
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--teal);
+      color: var(--teal);
+      background: var(--teal-soft);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .top-meta {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .page-shell {
+      width: min(calc(100% - 48px), var(--content));
+      margin: 0 auto;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.55fr);
+      gap: 56px;
+      align-items: end;
+      min-height: 650px;
+      padding: 84px 0 66px;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 28px;
+      color: var(--teal);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .eyebrow::before {
+      width: 28px;
+      height: 2px;
+      background: var(--teal);
+      content: "";
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 26px;
+      font-size: clamp(40px, 6.2vw, 66px);
+      font-weight: 760;
+      line-height: 1.08;
+    }
+
+    h1 .accent {
+      color: var(--teal);
+    }
+
+    .title-product,
+    .title-topic {
+      display: block;
+    }
+
+    .title-topic {
+      text-wrap: balance;
+    }
+
+    .hero-lead {
+      max-width: 760px;
+      margin-bottom: 32px;
+      color: var(--ink-soft);
+      font-size: 19px;
+      line-height: 1.75;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      color: var(--ink-faint);
+      font-size: 12px;
+    }
+
+    .hero-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .hero-meta span::before {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--teal);
+      content: "";
+    }
+
+    .verdict-panel {
+      position: relative;
+      overflow: hidden;
+      padding: 28px;
+      border: 1px solid var(--teal);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .verdict-panel::before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 6px;
+      background: linear-gradient(90deg, var(--teal) 0 73%, var(--amber) 73% 88%, var(--brick) 88%);
+      content: "";
+    }
+
+    .verdict-kicker {
+      margin: 8px 0 12px;
+      color: var(--ink-faint);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .verdict-title {
+      margin-bottom: 14px;
+      font-size: 28px;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    .verdict-copy {
+      margin-bottom: 24px;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .verdict-score {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .verdict-score strong {
+      color: var(--teal);
+      font-size: 52px;
+      line-height: 1;
+    }
+
+    .verdict-score span {
+      color: var(--ink-faint);
+      font-size: 13px;
+    }
+
+    .verdict-note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .verdict-note strong {
+      flex: 0 0 auto;
+      color: var(--amber);
+    }
+
+    .verdict-points {
+      display: grid;
+      gap: 0;
+      margin-top: 22px;
+      border-top: 1px solid var(--line);
+    }
+
+    .verdict-point {
+      display: grid;
+      grid-template-columns: 74px minmax(0, 1fr);
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .verdict-point:last-child {
+      border-bottom: 0;
+    }
+
+    .verdict-point strong {
+      color: var(--teal-dark);
+      font-size: 12px;
+    }
+
+    .verdict-point span {
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .kpi {
+      min-height: 142px;
+      padding: 26px 24px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 254, 249, 0.56);
+    }
+
+    .kpi:last-child {
+      border-right: 0;
+    }
+
+    .kpi-value {
+      margin-bottom: 6px;
+      color: var(--teal);
+      font-size: 33px;
+      font-weight: 780;
+      line-height: 1.2;
+    }
+
+    .kpi-label {
+      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .kpi-note {
+      color: var(--ink-faint);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    .toc-section {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 50px;
+      padding: 58px 0;
+      border-bottom: 1px solid var(--line-strong);
+    }
+
+    .toc-title {
+      margin-bottom: 8px;
+      font-size: 24px;
+    }
+
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0 40px;
+      border-top: 1px solid var(--line);
+    }
+
+    .toc-link {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: 10px;
+      align-items: center;
+      min-height: 52px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .toc-link:hover {
+      color: var(--teal);
+    }
+
+    .toc-index {
+      color: var(--ink-faint);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .toc-text {
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .report-section {
+      padding: 84px 0;
+      border-bottom: 1px solid var(--line-strong);
+      scroll-margin-top: 70px;
+    }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 28px;
+      margin-bottom: 44px;
+    }
+
+    .section-number {
+      padding-top: 6px;
+      color: var(--teal);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .section-title {
+      margin-bottom: 12px;
+      font-size: clamp(30px, 4vw, 46px);
+      font-weight: 750;
+      line-height: 1.2;
+      text-wrap: balance;
+    }
+
+    .section-intro {
+      max-width: 850px;
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 16px;
+    }
+
+    h3 {
+      margin-bottom: 16px;
+      font-size: 23px;
+      font-weight: 730;
+      line-height: 1.35;
+    }
+
+    h4 {
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 720;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 42px;
+    }
+
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 14px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .summary-item {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 14px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-item:first-child {
+      border-top: 1px solid var(--line);
+    }
+
+    .summary-index {
+      color: var(--teal);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .summary-copy strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 15px;
+    }
+
+    .summary-copy span {
+      color: var(--ink-soft);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .decision-box {
+      padding: 26px 28px;
+      border-left: 4px solid var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .decision-box .label {
+      margin-bottom: 8px;
+      color: var(--teal-dark);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .decision-box p {
+      margin-bottom: 14px;
+      font-size: 16px;
+      font-weight: 650;
+    }
+
+    .decision-box p:last-child {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .callout {
+      margin: 28px 0;
+      padding: 20px 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .callout.warning {
+      border-color: #d8b475;
+      background: var(--amber-soft);
+    }
+
+    .callout.danger {
+      border-color: #d2a397;
+      background: var(--brick-soft);
+    }
+
+    .callout.info {
+      border-color: #aebfd0;
+      background: var(--blue-soft);
+    }
+
+    .callout-title {
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+
+    .tag {
+      display: inline-flex;
+      min-height: 22px;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 8px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 750;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .tag.measured {
+      color: var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .tag.inferred {
+      color: var(--blue);
+      background: var(--blue-soft);
+    }
+
+    .tag.pending {
+      color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .tag.risk {
+      color: var(--brick);
+      background: var(--brick-soft);
+    }
+
+    .scoreboard {
+      border-top: 1px solid var(--line-strong);
+    }
+
+    .score-row {
+      display: grid;
+      grid-template-columns: 170px minmax(160px, 1fr) 56px 240px;
+      gap: 20px;
+      align-items: center;
+      min-height: 66px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .score-name {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .score-bar {
+      position: relative;
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: var(--paper-deep);
+    }
+
+    .score-bar span {
+      display: block;
+      width: var(--score);
+      height: 100%;
+      border-radius: inherit;
+      background: var(--bar-color, var(--teal));
+    }
+
+    .score-value {
+      color: var(--ink);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 18px;
+      font-weight: 800;
+      text-align: right;
+    }
+
+    .score-comment {
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .score-footnote {
+      margin-top: 18px;
+      color: var(--ink-faint);
+      font-size: 11px;
+    }
+
+    .table-wrap {
+      margin: 22px 0 30px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    th,
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--ink-soft);
+      background: var(--paper-deep);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td.num,
+    th.num {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .wide-table {
+      min-width: 800px;
+    }
+
+    .architecture {
+      display: grid;
+      gap: 10px;
+      margin: 28px 0;
+    }
+
+    .arch-layer {
+      display: grid;
+      grid-template-columns: 180px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .arch-layer-name {
+      display: flex;
+      min-height: 84px;
+      align-items: center;
+      padding: 18px 20px;
+      border-right: 1px solid var(--line);
+      color: var(--teal-dark);
+      background: var(--teal-soft);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .arch-layer:nth-child(2) .arch-layer-name {
+      color: #68420c;
+      background: var(--amber-soft);
+    }
+
+    .arch-layer:nth-child(3) .arch-layer-name {
+      color: #263f59;
+      background: var(--blue-soft);
+    }
+
+    .arch-layer:nth-child(4) .arch-layer-name {
+      color: #642c22;
+      background: var(--brick-soft);
+    }
+
+    .arch-layer:nth-child(5) .arch-layer-name {
+      color: var(--ink);
+      background: var(--paper-deep);
+    }
+
+    .arch-components {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      padding: 18px 20px;
+    }
+
+    .arch-chip {
+      display: inline-flex;
+      min-height: 30px;
+      align-items: center;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--paper);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .node-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--line-strong);
+      border-left: 1px solid var(--line);
+    }
+
+    .node {
+      min-height: 190px;
+      padding: 22px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 254, 249, 0.55);
+    }
+
+    .node-label {
+      margin-bottom: 18px;
+      color: var(--teal);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .node h4 {
+      font-size: 17px;
+    }
+
+    .node p {
+      margin-bottom: 12px;
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+
+    .node p:last-child {
+      margin-bottom: 0;
+    }
+
+    .mini-code {
+      display: inline-block;
+      max-width: 100%;
+      padding: 2px 6px;
+      overflow-wrap: anywhere;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--ink);
+      background: var(--paper);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+    }
+
+    .gap-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+    }
+
+    .gap-item {
+      min-height: 142px;
+      padding: 20px 22px;
+      background: var(--surface);
+    }
+
+    .gap-item h4 {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .gap-item p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .diagram-wrap {
+      margin: 30px 0;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .diagram {
+      display: block;
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+    }
+
+    .diagram-caption {
+      padding: 12px 16px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-faint);
+      font-size: 11px;
+    }
+
+    .mechanism-visual {
+      --visual-accent: var(--mechanism-accent);
+      --visual-soft: var(--mechanism-soft);
+      margin: 0 0 15px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--paper);
+    }
+
+    .mechanism-visual svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .mechanism-visual .mv-box {
+      fill: var(--surface);
+      stroke: var(--line-strong);
+      stroke-width: 1;
+    }
+
+    .mechanism-visual .mv-soft {
+      fill: var(--visual-soft);
+      stroke: var(--visual-accent);
+      stroke-width: 1;
+    }
+
+    .mechanism-visual .mv-muted {
+      fill: var(--paper-deep);
+      stroke: var(--line);
+      stroke-width: 1;
+    }
+
+    .mechanism-visual .mv-line {
+      fill: none;
+      stroke: var(--ink-faint);
+      stroke-width: 1.4;
+    }
+
+    .mechanism-visual .mv-accent-line {
+      fill: none;
+      stroke: var(--visual-accent);
+      stroke-width: 1.5;
+    }
+
+    .mechanism-visual .mv-dash {
+      fill: none;
+      stroke: var(--line-strong);
+      stroke-width: 1;
+      stroke-dasharray: 4 4;
+    }
+
+    .mechanism-visual .mv-text {
+      fill: var(--ink);
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .mechanism-visual .mv-small {
+      fill: var(--ink-soft);
+      font-size: 9.5px;
+    }
+
+    .mechanism-visual .mv-kicker {
+      fill: var(--visual-accent);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .mechanism-visual .mv-accent {
+      fill: var(--visual-accent);
+    }
+
+    .mechanism-visual .mv-amber {
+      fill: var(--amber);
+    }
+
+    .mechanism-visual .mv-brick {
+      fill: var(--brick);
+    }
+
+    .optimization-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px 36px;
+      margin-top: 28px;
+    }
+
+    .optimization {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 14px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .optimization-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid var(--teal);
+      border-radius: 6px;
+      color: var(--teal);
+      background: var(--teal-soft);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .optimization p {
+      margin-bottom: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .performance-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 44px;
+    }
+
+    .perf-block {
+      padding-top: 22px;
+      border-top: 2px solid var(--teal);
+    }
+
+    .perf-block.secondary {
+      border-top-color: var(--amber);
+    }
+
+    .perf-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 20px;
+      font-size: 18px;
+      font-weight: 750;
+    }
+
+    .perf-bars {
+      display: grid;
+      gap: 18px;
+    }
+
+    .perf-row {
+      display: grid;
+      grid-template-columns: 116px minmax(100px, 1fr) 112px;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .perf-name {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .perf-track {
+      position: relative;
+      height: 13px;
+      overflow: hidden;
+      background: var(--paper-deep);
+    }
+
+    .perf-track span {
+      display: block;
+      width: var(--value);
+      height: 100%;
+      background: var(--color, var(--teal));
+    }
+
+    .perf-track::after {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 95%;
+      width: 1px;
+      background: var(--ink-faint);
+      content: "";
+    }
+
+    .perf-value {
+      padding-right: 4px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .perf-value strong,
+    .perf-value small {
+      display: block;
+    }
+
+    .perf-value strong {
+      font: inherit;
+      color: var(--ink);
+    }
+
+    .perf-value small {
+      margin-top: 1px;
+      color: var(--ink-faint);
+      font-size: 9px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .request-map {
+      margin: 30px 0 38px;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .thesis-panel {
+      display: grid;
+      grid-template-columns: minmax(270px, 0.82fr) minmax(0, 1.65fr);
+      margin: 28px 0 0;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .thesis-lead {
+      position: relative;
+      padding: 26px 25px;
+      color: #f7f7f2;
+      background: var(--ink);
+    }
+
+    .thesis-lead::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      background: var(--teal);
+      content: "";
+    }
+
+    .thesis-kicker {
+      display: block;
+      margin-bottom: 10px;
+      color: #9fd0c8;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .thesis-lead h3 {
+      max-width: 320px;
+      margin: 0 0 12px;
+      color: #fffef9;
+      font-size: 25px;
+      line-height: 1.3;
+    }
+
+    .thesis-lead p {
+      max-width: 330px;
+      margin: 0;
+      color: #d5ddda;
+      font-size: 12px;
+      line-height: 1.75;
+    }
+
+    .thesis-signals {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .thesis-signal {
+      --signal-color: var(--teal);
+      --signal-soft: var(--teal-soft);
+      min-width: 0;
+      padding: 19px 20px 18px;
+      background: var(--surface);
+    }
+
+    .thesis-signal:nth-child(2) {
+      --signal-color: var(--amber);
+      --signal-soft: var(--amber-soft);
+    }
+
+    .thesis-signal:nth-child(3) {
+      --signal-color: var(--brick);
+      --signal-soft: var(--brick-soft);
+    }
+
+    .thesis-signal:nth-child(4) {
+      --signal-color: var(--blue);
+      --signal-soft: var(--blue-soft);
+    }
+
+    .thesis-signal-label {
+      display: inline-flex;
+      min-height: 22px;
+      align-items: center;
+      margin-bottom: 9px;
+      padding: 2px 7px;
+      border: 1px solid color-mix(in srgb, var(--signal-color) 32%, var(--line));
+      border-radius: 3px;
+      color: var(--signal-color);
+      background: var(--signal-soft);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 8px;
+      font-weight: 800;
+    }
+
+    .thesis-signal strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--ink);
+      font-size: 14px;
+    }
+
+    .thesis-signal p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 10.5px;
+      line-height: 1.58;
+    }
+
+    .thesis-signal-tech {
+      display: block;
+      margin-top: 10px;
+      color: var(--signal-color);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .request-map-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      padding: 22px 24px 18px;
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(120deg, rgba(220, 236, 232, 0.8), transparent 54%),
+        var(--surface);
+    }
+
+    .request-map-kicker {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--teal);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .request-map-head h3 {
+      margin: 0;
+      font-size: 21px;
+    }
+
+    .request-map-note {
+      max-width: 260px;
+      color: var(--ink-faint);
+      font-size: 10px;
+      line-height: 1.55;
+      text-align: right;
+    }
+
+    .request-track {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .request-stage {
+      position: relative;
+      min-width: 0;
+      padding: 22px 21px 20px;
+      background: var(--surface);
+    }
+
+    .request-stage::before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 3px;
+      background: var(--stage-color, var(--teal));
+      content: "";
+    }
+
+    .request-stage:nth-child(2) {
+      --stage-color: var(--amber);
+    }
+
+    .request-stage:nth-child(3) {
+      --stage-color: var(--brick);
+    }
+
+    .request-stage:nth-child(4) {
+      --stage-color: var(--blue);
+    }
+
+    .request-stage-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .request-stage-index {
+      color: var(--stage-color, var(--teal));
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 22px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .request-stage-kind {
+      color: var(--ink-faint);
+      font-size: 9px;
+      font-weight: 750;
+      text-align: right;
+    }
+
+    .request-stage h4 {
+      margin-bottom: 7px;
+      font-size: 16px;
+    }
+
+    .request-stage p {
+      min-height: 72px;
+      margin-bottom: 14px;
+      color: var(--ink-soft);
+      font-size: 11.5px;
+      line-height: 1.6;
+    }
+
+    .request-stage-tech {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      color: var(--stage-color, var(--teal));
+      background: var(--paper);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 750;
+    }
+
+    .request-rails {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      border-top: 1px solid var(--line);
+      background: var(--line);
+    }
+
+    .request-rail {
+      min-width: 0;
+      padding: 18px 21px;
+      background: var(--paper);
+    }
+
+    .request-rail-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .request-rail-title::before {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--rail-color, var(--teal));
+      content: "";
+    }
+
+    .request-rail:nth-child(2) {
+      --rail-color: var(--amber);
+    }
+
+    .request-rail p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 10.5px;
+      line-height: 1.55;
+    }
+
+    .rail-lanes {
+      display: grid;
+      gap: 5px;
+      margin-top: 11px;
+    }
+
+    .rail-lane {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 7px;
+      align-items: center;
+      color: var(--ink-faint);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 8px;
+      font-weight: 700;
+    }
+
+    .rail-lane-track {
+      position: relative;
+      height: 6px;
+      overflow: hidden;
+      border-radius: 3px;
+      background: var(--line);
+    }
+
+    .rail-lane-track span {
+      display: block;
+      width: 68%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--teal);
+    }
+
+    .rail-lane:nth-child(2) .rail-lane-track span {
+      margin-left: 32%;
+      background: var(--blue);
+    }
+
+    .rail-chain {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      align-items: center;
+      margin-top: 11px;
+    }
+
+    .rail-chain span {
+      padding: 2px 6px;
+      border: 1px solid var(--line);
+      border-radius: 3px;
+      color: var(--ink-soft);
+      background: var(--surface);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 8px;
+      font-weight: 700;
+    }
+
+    .rail-chain i {
+      color: var(--ink-faint);
+      font-size: 10px;
+      font-style: normal;
+    }
+
+    .request-map-caption {
+      padding: 11px 21px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-faint);
+      font-size: 10px;
+      line-height: 1.55;
+    }
+
+    .mechanism-group {
+      margin-top: 40px;
+    }
+
+    .mechanism-group-head {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 15px;
+    }
+
+    .mechanism-group-index {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: var(--teal);
+      background: var(--surface);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .mechanism-group-head h3 {
+      margin: 0 0 4px;
+      font-size: 21px;
+    }
+
+    .mechanism-group-head p {
+      max-width: 820px;
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .mechanism-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--line);
+    }
+
+    .mechanism-card {
+      --mechanism-accent: var(--teal);
+      --mechanism-soft: var(--teal-soft);
+      min-width: 0;
+      padding: 24px;
+      border-top: 3px solid var(--mechanism-accent);
+      background: var(--surface);
+    }
+
+    .mechanism-card.model {
+      --mechanism-accent: var(--amber);
+      --mechanism-soft: var(--amber-soft);
+    }
+
+    .mechanism-card.schedule {
+      --mechanism-accent: var(--blue);
+      --mechanism-soft: var(--blue-soft);
+    }
+
+    .mechanism-card.is-wide {
+      grid-column: 1 / -1;
+    }
+
+    .mechanism-head {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 13px;
+    }
+
+    .mechanism-no {
+      display: grid;
+      flex: 0 0 30px;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid color-mix(in srgb, var(--mechanism-accent) 35%, var(--line));
+      border-radius: 4px;
+      color: var(--mechanism-accent);
+      background: var(--mechanism-soft);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 850;
+    }
+
+    .mechanism-title-wrap {
+      min-width: 0;
+    }
+
+    .mechanism-title-wrap h4 {
+      margin: 0 0 2px;
+      font-size: 17px;
+    }
+
+    .mechanism-kind {
+      color: var(--mechanism-accent);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 750;
+    }
+
+    .mechanism-plain {
+      margin: 0 0 15px;
+      padding: 10px 12px;
+      border-left: 3px solid var(--mechanism-accent);
+      color: var(--ink);
+      background: var(--mechanism-soft);
+      font-size: 12.5px;
+      font-weight: 750;
+      line-height: 1.55;
+    }
+
+    .mechanism-copy {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mechanism-copy p {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 11.5px;
+      line-height: 1.72;
+    }
+
+    .mechanism-copy strong {
+      color: var(--ink);
+    }
+
+    .mechanism-evidence {
+      margin: 15px 0 0;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 10.5px;
+      line-height: 1.6;
+    }
+
+    .mechanism-evidence strong {
+      color: var(--mechanism-accent);
+    }
+
+    .risk-matrix {
+      display: grid;
+      grid-template-columns: 210px minmax(0, 1fr);
+      margin-top: 24px;
+      border-top: 1px solid var(--line-strong);
+      border-left: 1px solid var(--line);
+    }
+
+    .risk-cell {
+      min-height: 82px;
+      padding: 16px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 254, 249, 0.6);
+      font-size: 12px;
+    }
+
+    .risk-cell.header {
+      display: flex;
+      align-items: center;
+      color: var(--ink-soft);
+      background: var(--paper-deep);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .risk-item {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: flex-start;
+    }
+
+    .risk-level {
+      display: inline-flex;
+      min-height: 20px;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 4px;
+      color: var(--brick);
+      background: var(--brick-soft);
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .risk-level.medium {
+      color: var(--amber);
+      background: var(--amber-soft);
+    }
+
+    .risk-level.low {
+      color: var(--teal);
+      background: var(--teal-soft);
+    }
+
+    .phase-line {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 24px;
+      margin-top: 38px;
+    }
+
+    .phase-line::before {
+      position: absolute;
+      top: 18px;
+      right: 8%;
+      left: 8%;
+      height: 1px;
+      background: var(--line-strong);
+      content: "";
+    }
+
+    .phase {
+      position: relative;
+      padding-top: 52px;
+    }
+
+    .phase-dot {
+      position: absolute;
+      z-index: 1;
+      top: 7px;
+      left: 0;
+      display: grid;
+      width: 23px;
+      height: 23px;
+      place-items: center;
+      border: 2px solid var(--paper);
+      border-radius: 50%;
+      color: #fff;
+      background: var(--teal);
+      box-shadow: 0 0 0 1px var(--teal);
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .phase-time {
+      margin-bottom: 6px;
+      color: var(--teal);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .phase h4 {
+      font-size: 15px;
+    }
+
+    .phase p {
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px 34px;
+      margin: 24px 0 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: gate;
+    }
+
+    .checklist li {
+      position: relative;
+      padding: 14px 0 14px 38px;
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-soft);
+      font-size: 13px;
+      counter-increment: gate;
+    }
+
+    .checklist li::before {
+      position: absolute;
+      top: 13px;
+      left: 0;
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      color: var(--teal);
+      background: var(--surface);
+      content: counter(gate, decimal-leading-zero);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    .source-list {
+      display: grid;
+      gap: 0;
+      margin-top: 24px;
+      border-top: 1px solid var(--line-strong);
+    }
+
+    .source-row {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr) 150px;
+      gap: 22px;
+      align-items: start;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .source-path {
+      overflow-wrap: anywhere;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .source-purpose {
+      color: var(--ink-soft);
+      font-size: 12px;
+    }
+
+    .source-type {
+      color: var(--ink-faint);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    .glossary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px 32px;
+      margin-top: 26px;
+    }
+
+    .term {
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    .term dt {
+      margin-bottom: 4px;
+      color: var(--teal-dark);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .term dd {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 980px) {
+      .hero {
+        grid-template-columns: 1fr;
+        gap: 36px;
+        min-height: auto;
+        padding-top: 64px;
+      }
+
+      .verdict-panel {
+        max-width: 620px;
+      }
+
+      .kpi-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kpi:nth-child(2) {
+        border-right: 0;
+      }
+
+      .kpi:nth-child(-n + 2) {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .toc-section {
+        grid-template-columns: 1fr;
+        gap: 24px;
+      }
+
+      .score-row {
+        grid-template-columns: 140px minmax(120px, 1fr) 50px;
+      }
+
+      .score-comment {
+        display: none;
+      }
+
+      .node-grid,
+      .three-col {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .performance-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .phase-line {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .phase-line::before {
+        display: none;
+      }
+
+      .request-track {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .thesis-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .request-stage p {
+        min-height: auto;
+      }
+
+      .request-rails {
+        grid-template-columns: 1fr;
+      }
+
+      .source-row {
+        grid-template-columns: 190px minmax(0, 1fr);
+      }
+
+      .source-type {
+        display: none;
+      }
+
+      .glossary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        font-size: 15px;
+        background-size: 34px 34px;
+      }
+
+      .topbar {
+        gap: 12px;
+        padding-right: 16px;
+        padding-left: 16px;
+      }
+
+      .top-meta > span {
+        display: none;
+      }
+
+      .page-shell {
+        width: min(calc(100% - 30px), var(--content));
+      }
+
+      .hero {
+        padding: 48px 0 42px;
+      }
+
+      h1 {
+        font-size: clamp(35px, 9.6vw, 42px);
+      }
+
+      .hero-lead {
+        font-size: 16px;
+      }
+
+      .hero-meta {
+        display: grid;
+      }
+
+      .kpi-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .kpi {
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .kpi:last-child {
+        border-bottom: 0;
+      }
+
+      .toc-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .report-section {
+        padding: 62px 0;
+      }
+
+      .section-heading {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin-bottom: 32px;
+      }
+
+      .two-col,
+      .three-col,
+      .gap-list,
+      .optimization-list,
+      .mechanism-grid,
+      .checklist {
+        grid-template-columns: 1fr;
+      }
+
+      .score-row {
+        grid-template-columns: 1fr 54px;
+        gap: 10px 16px;
+        padding: 13px 0;
+      }
+
+      .score-bar {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .score-value {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .arch-layer {
+        grid-template-columns: 1fr;
+      }
+
+      .arch-layer-name {
+        min-height: auto;
+        padding: 11px 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .node-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .perf-row {
+        grid-template-columns: 105px minmax(100px, 1fr) 100px;
+        gap: 8px;
+      }
+
+      .request-map-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .thesis-panel {
+        grid-template-columns: 1fr;
+      }
+
+      .thesis-signals {
+        grid-template-columns: 1fr;
+      }
+
+      .mechanism-group-head {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .mechanism-group-index {
+        width: 36px;
+        height: 36px;
+      }
+
+      .request-map-note {
+        max-width: none;
+        text-align: left;
+      }
+
+      .request-track {
+        grid-template-columns: 1fr;
+      }
+
+      .mechanism-card.is-wide {
+        grid-column: auto;
+      }
+
+      .risk-matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .risk-cell.header:first-child {
+        display: none;
+      }
+
+      .risk-cell.header {
+        min-height: auto;
+      }
+
+      .phase-line {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+
+      .phase {
+        padding: 0 0 20px 42px;
+      }
+
+      .phase-dot {
+        top: 1px;
+      }
+
+      .source-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .glossary {
+        grid-template-columns: 1fr;
+      }
+
+    }
+
+    @media (max-width: 520px) {
+      .mechanism-visual {
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .mechanism-visual svg {
+        width: 520px;
+        min-width: 520px;
+        max-width: none;
+      }
+
+      .perf-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 5px 10px;
+      }
+
+      .perf-name {
+        grid-column: 1;
+        grid-row: 1;
+      }
+
+      .perf-value {
+        grid-column: 2;
+        grid-row: 1;
+      }
+
+      .perf-track {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
+
+      .request-map-head,
+      .thesis-lead,
+      .thesis-signal,
+      .request-stage,
+      .request-rail,
+      .mechanism-card {
+        padding-right: 18px;
+        padding-left: 18px;
+      }
+
+      .request-map-caption {
+        padding-right: 18px;
+        padding-left: 18px;
+      }
+
+    }
+
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress-line" id="progressLine" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">DI</span>
+      <span>DeepInfer 技术分析</span>
+    </div>
+    <div class="top-meta">
+      <span>开源快照 774ce24 · 2026-10-20</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero page-shell" aria-labelledby="reportTitle">
+      <div>
+        <div class="eyebrow">技术分析 · DeepSeek V4.1 推理栈</div>
+        <h1 id="reportTitle">
+          <span class="title-product">DeepInfer</span>
+          <span class="title-topic accent">昇腾适配与计算架构分析</span>
+        </h1>
+        <p class="hero-lead">
+          DeepInfer 是 DeepSeek 面向单一旗舰模型深度定制的高性能推理框架。以下分析依据当前开源仓库与随仓库组件文档，覆盖昇腾适配链路、CUBE / VECTOR 数据流、稀疏 Attention 微架构、EP 通信实现及公开性能证据。
+        </p>
+        <div class="hero-meta">
+          <span>代码快照：<strong>774ce24</strong></span>
+          <span>分析日期：2026-10-21</span>
+          <span>分析范围：昇腾适配、计算架构、并行调度、性能数据</span>
+        </div>
+      </div>
+
+      <aside class="verdict-panel" aria-label="核心技术特征">
+        <div class="verdict-kicker">核心技术特征</div>
+        <div class="verdict-title">单模型垂直优化<br>多层昇腾后端</div>
+        <p class="verdict-copy">
+          昇腾适配不是简单兼容层，而是包含构建系统、运行时、集合通信、核心算子与图执行的多层工程。本次开源快照聚焦离线推理与规模化服务核心，各层均形成明确实现路径，并围绕目标环境持续完善。
+        </p>
+        <div class="verdict-points">
+          <div class="verdict-point">
+            <strong>模型范围</strong>
+            <span>围绕 DeepSeek-V4.1-Flash 固定形状、稀疏模式和 KV 布局做协同设计。</span>
+          </div>
+          <div class="verdict-point">
+            <strong>硬件路径</strong>
+            <span>NVIDIA 与昇腾分别维护构建、算子、数据布局与集合通信后端。</span>
+          </div>
+          <div class="verdict-point">
+            <strong>开源边界</strong>
+            <span>推理引擎核心可审计，跨实例 KV Cache、P/D 编排与副本均衡不在当前 release。</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="kpi-strip page-shell" aria-label="关键事实">
+      <div class="kpi">
+        <div class="kpi-value">950</div>
+        <div class="kpi-label">Ascend 950 共用核心架构</div>
+        <div class="kpi-note">dav-3510 微架构；优化覆盖 950PR 与 950DT</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value">1C2V</div>
+        <div class="kpi-label">稀疏 Attention 核内编组</div>
+        <div class="kpi-note">每个 AI Core 使用 1 CUBE + 2 VECTOR，分摊 softmax、反量化与累加</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value">410 TFLOPS</div>
+        <div class="kpi-label">稀疏 Attention Prefill 实测吞吐</div>
+        <div class="kpi-note">FlashMLA 组件实测；BF16 参考峰值 432 TFLOPS</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-value">EP128</div>
+        <div class="kpi-label">DeepEP-Ascend 已验证规模</div>
+        <div class="kpi-note">128 个专家并行 rank；最高 320 GB/s dispatch</div>
+      </div>
+    </section>
+
+    <section class="toc-section page-shell" aria-labelledby="tocTitle">
+      <div>
+        <h2 class="toc-title" id="tocTitle">阅读路径</h2>
+      </div>
+      <nav class="toc-grid" aria-label="目录">
+        <a class="toc-link" href="#s1"><span class="toc-index">01</span><span class="toc-text">并行、调度与模型级创新</span></a>
+        <a class="toc-link" href="#s2"><span class="toc-index">02</span><span class="toc-text">DeepInfer 的定位与开源边界</span></a>
+        <a class="toc-link" href="#s3"><span class="toc-index">03</span><span class="toc-text">昇腾适配全景与实现深度</span></a>
+        <a class="toc-link" href="#s4"><span class="toc-index">04</span><span class="toc-text">计算架构与芯片内数据流</span></a>
+        <a class="toc-link" href="#s5"><span class="toc-index">05</span><span class="toc-text">性能数据与来源</span></a>
+        <a class="toc-link" href="#s6"><span class="toc-index">06</span><span class="toc-text">源码证据与术语</span></a>
+      </nav>
+    </section>
+
+    <section class="report-section page-shell" id="s1">
+      <div class="section-heading">
+        <div class="section-number">01 / 06</div>
+        <div>
+          <h2 class="section-title">并行、调度与模型级创新</h2>
+          <p class="section-intro">
+            DeepSeek V4.1 的一次请求会同时碰到几类等待：长上下文要求 Prefill 在更多设备间分摊计算，MoE 路由把延迟集中到最忙的专家，自回归 Decode 把生成拆成大量串行小步，缓存恢复和 CPU 排批又可能让设备空等。DeepInfer 的价值不在于堆叠更多并行名词，而是把模型已知的形状、稀疏模式和 KV 规则带进并行、通信与调度，让这些等待尽量不再落在关键路径上。
+          </p>
+        </div>
+      </div>
+
+      <aside class="thesis-panel" aria-labelledby="thesisTitle">
+        <div class="thesis-lead">
+          <span class="thesis-kicker">核心判断</span>
+          <h3 id="thesisTitle">推理变慢，常常不是设备算得慢，而是设备在等。</h3>
+          <p>DeepInfer 针对固定模型重新安排工作分配、生成步数和模块边界，目标是把等待从首 token、每个 Decode step 和 MoE 往返中移走。</p>
+        </div>
+        <div class="thesis-signals">
+          <article class="thesis-signal">
+            <span class="thesis-signal-label">长上下文</span>
+            <strong>一条请求拖住一组设备</strong>
+            <p>数据并行能增加请求副本，却不能自动拆开单条长 Prompt。上下文越长，首 token 阶段越容易受最慢设备限制。</p>
+            <span class="thesis-signal-tech">Balanced CP 分段并行</span>
+          </article>
+          <article class="thesis-signal">
+            <span class="thesis-signal-label">专家热点</span>
+            <strong>最慢 rank 决定整轮时间</strong>
+            <p>MoE 把专家铺到更多 rank 后容量更大，但 token 分发、热点专家和结果汇合都会形成新的等待。</p>
+            <span class="thesis-signal-tech">EP + DeepEP + EPLB</span>
+          </article>
+          <article class="thesis-signal">
+            <span class="thesis-signal-label">逐 token 生成</span>
+            <strong>一次迭代只能前进一格</strong>
+            <p>标准 Decode 产生大量串行小步。小 batch 时算力宽度不足，权重读取与启动开销却仍要反复支付。</p>
+            <span class="thesis-signal-tech">DSpark 多 token 验证</span>
+          </article>
+          <article class="thesis-signal">
+            <span class="thesis-signal-label">模块边界</span>
+            <strong>CPU、通信与访存互相等</strong>
+            <p>排批、多个 MoE kernel 和缓存恢复原本各自完成工作，却可能让 NPU 空转，或让同一份中间数据反复读写。</p>
+            <span class="thesis-signal-tech">异步调度 + MegaMoE</span>
+          </article>
+        </div>
+      </aside>
+
+      <figure class="request-map" aria-labelledby="requestMapTitle">
+        <div class="request-map-head">
+          <div>
+            <span class="request-map-kicker">请求关键路径</span>
+            <h3 id="requestMapTitle">四类等待，决定用户多久看到首 token 和下一个 token</h3>
+          </div>
+          <div class="request-map-note">按瓶颈最常出现的位置归类，不代表固定生产拓扑或实际部署规模。</div>
+        </div>
+        <div class="request-track">
+          <article class="request-stage">
+            <div class="request-stage-top">
+              <span class="request-stage-index">01</span>
+              <span class="request-stage-kind">Prefill · 首 token</span>
+            </div>
+            <h4>长 Prompt 被一组设备独自承担</h4>
+            <p>数据并行通常先扩请求副本，单条长请求仍受一组设备限制。上下文越长，首 token 阶段越容易形成“最慢分片决定完成时间”的木桶效应。</p>
+            <span class="request-stage-tech">Balanced CP：切分上下文并平衡各 rank 工作量</span>
+          </article>
+          <article class="request-stage">
+            <div class="request-stage-top">
+              <span class="request-stage-index">02</span>
+              <span class="request-stage-kind">MoE · 专家路由</span>
+            </div>
+            <h4>token 必须等最忙的专家</h4>
+            <p>EP 扩大专家容量，但 token 要先跨 rank 分发、计算后再汇合。热点专家或通信拥塞会让部分 rank 先做完、另一部分 rank 还在排队。</p>
+            <span class="request-stage-tech">EP + DeepEP：扩大专家池并优化跨卡通信</span>
+          </article>
+          <article class="request-stage">
+            <div class="request-stage-top">
+              <span class="request-stage-index">03</span>
+              <span class="request-stage-kind">Decode · 下一 token</span>
+            </div>
+            <h4>主模型每一步只能确认一个 token</h4>
+            <p>标准自回归 Decode 把生成拆成大量串行小步。小 batch 下设备算力宽度不足，模型权重读取和 kernel 启动却仍按每一步重复。</p>
+            <span class="request-stage-tech">DSpark：一次验证多个候选 token</span>
+          </article>
+          <article class="request-stage">
+            <div class="request-stage-top">
+              <span class="request-stage-index">04</span>
+              <span class="request-stage-kind">KV · 历史恢复</span>
+            </div>
+            <h4>已失效的历史被重新计算</h4>
+            <p>完整重放可以保证正确性，但 SWA 窗口之外的历史已经不影响当前输出。继续读取和重新 Prefill 只会增加缓存恢复时间。</p>
+            <span class="request-stage-tech">SWA bounded replay：只重放必要后缀</span>
+          </article>
+        </div>
+        <div class="request-rails">
+          <div class="request-rail">
+            <div class="request-rail-title">跨阶段等待一：CPU 排批时，NPU 停着</div>
+            <p>若先完成请求检查、batch 拼装和元数据准备，再把任务交给 NPU，设备执行时间会很短，但每轮都要等待 CPU。异步调度让下一批的准备与当前批执行重叠。</p>
+            <div class="rail-lanes" aria-hidden="true">
+              <div class="rail-lane"><span>CPU</span><div class="rail-lane-track"><span></span></div></div>
+              <div class="rail-lane"><span>NPU</span><div class="rail-lane-track"><span></span></div></div>
+            </div>
+          </div>
+          <div class="request-rail">
+            <div class="request-rail-title">跨阶段等待二：MoE 中间结果来回搬</div>
+            <p>dispatch、GEMM、SwiGLU 和 combine 若各自成为独立 kernel，中间结果就要反复写入和读取。MegaMoE 把这些阶段放进同一条数据流联合考虑。</p>
+            <div class="rail-chain" aria-hidden="true">
+              <span>Dispatch</span><i>→</i><span>GEMM</span><i>→</i><span>SwiGLU</span><i>→</i><span>Combine</span>
+            </div>
+          </div>
+        </div>
+        <figcaption class="request-map-caption">
+          EP16 / CP8 是昇腾离线 CI 的并行配置，用于说明多节点路径已被覆盖，不代表生产环境固定采用这一规模，也不构成性能结果。
+        </figcaption>
+      </figure>
+
+      <div class="mechanism-group">
+        <div class="mechanism-group-head">
+          <span class="mechanism-group-index">01</span>
+          <div>
+            <h3>先把一个大任务拆给更多设备</h3>
+            <p>CP 与 EP 解决“算力铺不开”的问题。Balanced CP 处理单条长请求，MoE EP 扩大专家池，EPLB 再处理真实路由形成的新热点。</p>
+          </div>
+        </div>
+
+        <div class="mechanism-grid">
+          <article class="mechanism-card">
+            <div class="mechanism-head">
+              <span class="mechanism-no">01</span>
+              <div class="mechanism-title-wrap">
+                <h4>Balanced CP：让一条长请求也能多卡并行</h4>
+                <span class="mechanism-kind">并行 · 长上下文 Prefill</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">不是让更多请求同时运行，而是把同一条长 Prompt 拆成工作量接近的几段，让多张卡一起完成首 token 阶段。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 158" role="img" aria-labelledby="cpVisualTitle cpVisualDesc">
+                <title id="cpVisualTitle">Balanced CP 上下文切分示意</title>
+                <desc id="cpVisualDesc">一条长 Prompt 被切成四段，四个 CP rank 分到的 token 数与计算量接近，再共同完成首 token 阶段。</desc>
+                <defs>
+                  <marker id="cpArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#51605e"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="17">同一请求 · 上下文切分</text>
+                <rect class="mv-box" x="16" y="34" width="88" height="48" rx="5"></rect>
+                <text class="mv-text" x="60" y="55" text-anchor="middle">长 Prompt</text>
+                <text class="mv-small" x="60" y="71" text-anchor="middle">2048 tokens</text>
+                <path class="mv-line" d="M104 58H138" marker-end="url(#cpArrow)"></path>
+                <rect class="mv-soft" x="146" y="34" width="70" height="48" rx="5"></rect>
+                <rect class="mv-soft" x="230" y="34" width="70" height="48" rx="5"></rect>
+                <rect class="mv-soft" x="314" y="34" width="70" height="48" rx="5"></rect>
+                <rect class="mv-soft" x="398" y="34" width="70" height="48" rx="5"></rect>
+                <text class="mv-text" x="181" y="55" text-anchor="middle">CP 0</text>
+                <text class="mv-text" x="265" y="55" text-anchor="middle">CP 1</text>
+                <text class="mv-text" x="349" y="55" text-anchor="middle">CP 2</text>
+                <text class="mv-text" x="433" y="55" text-anchor="middle">CP 3</text>
+                <text class="mv-small" x="181" y="71" text-anchor="middle">≈ 58 tokens</text>
+                <text class="mv-small" x="265" y="71" text-anchor="middle">≈ 58 tokens</text>
+                <text class="mv-small" x="349" y="71" text-anchor="middle">≈ 58 tokens</text>
+                <text class="mv-small" x="433" y="71" text-anchor="middle">≈ 58 tokens</text>
+                <rect class="mv-accent" x="146" y="101" width="70" height="6" rx="3"></rect>
+                <rect class="mv-accent" x="230" y="101" width="70" height="6" rx="3"></rect>
+                <rect class="mv-accent" x="314" y="101" width="70" height="6" rx="3"></rect>
+                <rect class="mv-accent" x="398" y="101" width="70" height="6" rx="3"></rect>
+                <line class="mv-dash" x1="146" y1="124" x2="468" y2="124"></line>
+                <text class="mv-small" x="307" y="145" text-anchor="middle">各 rank 工作量接近，首 token 等待由最长分片决定</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>原来的限制：</strong>Attention DP 擅长增加请求副本，却不会自动拆分单条请求。长 Prompt 仍由一组设备承担，而且只要某个 rank 分到更多 token，其他 rank 做完后也必须等待。</p>
+              <p><strong>设计带来的变化：</strong>Balanced CP 按上下文切分，并尽量平衡各 rank 的 token 数和计算量。它同时扩大单请求可用的算力、缩小各 rank 完成时间差，因此缩短的是首 token 阶段的关键路径。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>2 节点 × 8 NPU 的离线 CI 使用 EP16 / CP8，覆盖这一并行组合；该配置对应功能验证口径，吞吐与时延按目标环境另行测试。</p>
+          </article>
+
+          <article class="mechanism-card">
+            <div class="mechanism-head">
+              <span class="mechanism-no">02</span>
+              <div class="mechanism-title-wrap">
+                <h4>MoE EP + DeepEP：把专家容量扩到集群</h4>
+                <span class="mechanism-kind">并行 · 专家分发与汇合</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">EP 让不同专家分布到更多 rank；DeepEP 负责把 token 送到目标专家，再把结果送回原 rank。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 158" role="img" aria-labelledby="epVisualTitle epVisualDesc">
+                <title id="epVisualTitle">专家并行与 DeepEP 分发汇合示意</title>
+                <desc id="epVisualDesc">原 rank 将 token dispatch 到多个专家 rank，专家计算完成后通过 combine 返回原 rank。</desc>
+                <defs>
+                  <marker id="epArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#51605e"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="17">专家并行 · 跨 rank 路由</text>
+                <rect class="mv-box" x="16" y="42" width="94" height="66" rx="5"></rect>
+                <text class="mv-text" x="63" y="67" text-anchor="middle">原 rank</text>
+                <text class="mv-small" x="63" y="85" text-anchor="middle">Token A / B / C</text>
+                <path class="mv-line" d="M110 66L176 38" marker-end="url(#epArrow)"></path>
+                <path class="mv-line" d="M110 75H176" marker-end="url(#epArrow)"></path>
+                <path class="mv-line" d="M110 84L176 112" marker-end="url(#epArrow)"></path>
+                <text class="mv-kicker" x="119" y="27">dispatch</text>
+                <rect class="mv-soft" x="184" y="22" width="112" height="32" rx="5"></rect>
+                <rect class="mv-soft" x="184" y="59" width="112" height="32" rx="5"></rect>
+                <rect class="mv-soft" x="184" y="96" width="112" height="32" rx="5"></rect>
+                <text class="mv-text" x="240" y="43" text-anchor="middle">专家 rank 0</text>
+                <text class="mv-text" x="240" y="80" text-anchor="middle">专家 rank 1</text>
+                <text class="mv-text" x="240" y="117" text-anchor="middle">专家 rank 2</text>
+                <path class="mv-accent-line" d="M296 38L382 67" marker-end="url(#epArrow)"></path>
+                <path class="mv-accent-line" d="M296 75H382" marker-end="url(#epArrow)"></path>
+                <path class="mv-accent-line" d="M296 112L382 83" marker-end="url(#epArrow)"></path>
+                <text class="mv-kicker" x="314" y="142">combine</text>
+                <rect class="mv-box" x="390" y="50" width="114" height="50" rx="5"></rect>
+                <text class="mv-text" x="447" y="72" text-anchor="middle">结果回原 rank</text>
+                <text class="mv-small" x="447" y="88" text-anchor="middle">继续后续层</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>为什么只扩卡不够：</strong>专家若集中在较小设备范围内，权重容量和并行算力都会受限。但引入 EP 后，token 的 dispatch 与 combine 会新增跨卡通信，通信路径做得不好，扩出去的算力会被等待抵消。</p>
+              <p><strong>设计带来的变化：</strong>EP 把专家铺到多个 rank，DeepEP-Ascend 则使用 HCCL / HCOMM、UBMEM 与 URMA 等昇腾路径完成分发和回收。真正的收益来自“专家计算扩出去”与“通信成本降下来”同时成立。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>公开验证覆盖 EP128，dispatch 峰值 313–320 GB/s；数据口径为 950DT、验证版 HDK 与外部 Clos 网络，一般生产带宽按实际组网配置评估。</p>
+          </article>
+
+          <article class="mechanism-card is-wide">
+            <div class="mechanism-head">
+              <span class="mechanism-no">03</span>
+              <div class="mechanism-title-wrap">
+                <h4>EPLB：让专家布局跟着真实请求热点移动</h4>
+                <span class="mechanism-kind">并行 · 负载再平衡</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">专家数量铺开以后，新的问题不是总量不够，而是少数热门专家排队；EPLB 的目标是压缩最忙 rank 的尾部工作量。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 176" role="img" aria-labelledby="eplbVisualTitle eplbVisualDesc">
+                <title id="eplbVisualTitle">EPLB 负载统计与专家重排示意</title>
+                <desc id="eplbVisualDesc">重排前少数 rank 负载明显更高；经过负载统计、方案求解与专家重排后，各 rank 负载更接近。</desc>
+                <defs>
+                  <marker id="eplbArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#0e6b61"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="22" y="18">重排前</text>
+                <text class="mv-kicker" x="360" y="18">重排后</text>
+                <line class="mv-dash" x1="24" y1="131" x2="162" y2="131"></line>
+                <line class="mv-dash" x1="354" y1="131" x2="492" y2="131"></line>
+                <rect class="mv-amber" x="34" y="86" width="11" height="45" rx="2"></rect>
+                <rect class="mv-brick" x="53" y="31" width="11" height="100" rx="2"></rect>
+                <rect class="mv-amber" x="72" y="74" width="11" height="57" rx="2"></rect>
+                <rect class="mv-brick" x="91" y="46" width="11" height="85" rx="2"></rect>
+                <rect class="mv-amber" x="110" y="98" width="11" height="33" rx="2"></rect>
+                <rect class="mv-brick" x="129" y="24" width="11" height="107" rx="2"></rect>
+                <rect class="mv-soft" x="148" y="68" width="11" height="63" rx="2"></rect>
+                <text class="mv-small mv-brick" x="126" y="17" text-anchor="middle">热点</text>
+                <rect class="mv-soft" x="366" y="67" width="11" height="64" rx="2"></rect>
+                <rect class="mv-soft" x="386" y="64" width="11" height="67" rx="2"></rect>
+                <rect class="mv-soft" x="406" y="66" width="11" height="65" rx="2"></rect>
+                <rect class="mv-soft" x="426" y="62" width="11" height="69" rx="2"></rect>
+                <rect class="mv-soft" x="446" y="66" width="11" height="65" rx="2"></rect>
+                <rect class="mv-soft" x="466" y="64" width="11" height="67" rx="2"></rect>
+                <path class="mv-accent-line" d="M182 82H334" marker-end="url(#eplbArrow)"></path>
+                <text class="mv-kicker" x="258" y="68" text-anchor="middle">统计 · 求解 · 重排</text>
+                <text class="mv-small" x="258" y="95" text-anchor="middle">按真实 token 负载调整专家位置</text>
+                <text class="mv-small" x="258" y="156" text-anchor="middle">目标：降低最忙 rank 的尾部等待，并控制权重迁移开销</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>为什么固定布局会失效：</strong>训练完成时的专家放置对某类请求可能合理，但线上流量变化后，少数专家会持续成为热点。MoE 一轮依赖最慢 rank 完成，平均利用率再高也不能消除这部分等待。</p>
+              <p><strong>设计带来的变化：</strong>EPLB 统计 token 负载，周期性调整专家放置，让各 rank 的热点更接近。它还必须控制权重迁移成本，否则“为了均衡而搬运”可能比原来的排队更贵。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>昇腾侧已覆盖负载统计、重排计算、在线权重同步与调度链路；权重 shuffle 使用通用 P2P 路径完成同步，后续可在平台对称内存接口就绪后接入单机镜像加速。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="mechanism-group">
+        <div class="mechanism-group-head">
+          <span class="mechanism-group-index">02</span>
+          <div>
+            <h3>再减少必须串行执行的步数</h3>
+            <p>并行只能分摊已经存在的工作。DSpark 减少主模型需要串行执行的 Decode 轮数，SWA bounded replay 则删掉对当前输出已无贡献的历史重算。</p>
+          </div>
+        </div>
+
+        <div class="mechanism-grid">
+          <article class="mechanism-card model">
+            <div class="mechanism-head">
+              <span class="mechanism-no">04</span>
+              <div class="mechanism-title-wrap">
+                <h4>DSpark：把“一步一 token”改成“一次核验多个”</h4>
+                <span class="mechanism-kind">模型级 · 投机解码</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">先用较轻的方式提出多个 draft token，再由主模型一次验证；接受的前缀越长，一次串行迭代前进得越多。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 170" role="img" aria-labelledby="dsparkVisualTitle dsparkVisualDesc">
+                <title id="dsparkVisualTitle">DSpark 多 token 草稿与主模型核验示意</title>
+                <desc id="dsparkVisualDesc">标准 Decode 每轮前进一个 token；DSpark 一次生成多个候选，由主模型核验并接受正确前缀。</desc>
+                <defs>
+                  <marker id="dsparkArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#51605e"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="16">标准自回归</text>
+                <rect class="mv-box" x="16" y="26" width="52" height="27" rx="4"></rect>
+                <rect class="mv-box" x="92" y="26" width="52" height="27" rx="4"></rect>
+                <rect class="mv-box" x="168" y="26" width="52" height="27" rx="4"></rect>
+                <rect class="mv-box" x="244" y="26" width="52" height="27" rx="4"></rect>
+                <text class="mv-small" x="42" y="44" text-anchor="middle">T1</text>
+                <text class="mv-small" x="118" y="44" text-anchor="middle">T2</text>
+                <text class="mv-small" x="194" y="44" text-anchor="middle">T3</text>
+                <text class="mv-small" x="270" y="44" text-anchor="middle">T4</text>
+                <path class="mv-line" d="M68 39H84" marker-end="url(#dsparkArrow)"></path>
+                <path class="mv-line" d="M144 39H160" marker-end="url(#dsparkArrow)"></path>
+                <path class="mv-line" d="M220 39H236" marker-end="url(#dsparkArrow)"></path>
+                <text class="mv-small" x="314" y="43">4 轮串行，每轮 1 token</text>
+                <line class="mv-dash" x1="16" y1="69" x2="504" y2="69"></line>
+                <text class="mv-kicker" x="16" y="88">DSpark</text>
+                <rect class="mv-box" x="16" y="98" width="72" height="42" rx="5"></rect>
+                <rect class="mv-soft" x="118" y="98" width="110" height="42" rx="5"></rect>
+                <rect class="mv-soft" x="258" y="98" width="106" height="42" rx="5"></rect>
+                <rect class="mv-soft" x="394" y="98" width="110" height="42" rx="5"></rect>
+                <text class="mv-text" x="52" y="117" text-anchor="middle">上下文</text>
+                <text class="mv-small" x="52" y="132" text-anchor="middle">当前前缀</text>
+                <text class="mv-text" x="173" y="117" text-anchor="middle">Draft × 4</text>
+                <text class="mv-small" x="173" y="132" text-anchor="middle">轻量候选</text>
+                <text class="mv-text" x="311" y="117" text-anchor="middle">主模型核验</text>
+                <text class="mv-small" x="311" y="132" text-anchor="middle">一次处理候选</text>
+                <text class="mv-text" x="449" y="117" text-anchor="middle">接受正确前缀</text>
+                <text class="mv-small" x="449" y="132" text-anchor="middle">示例：T1–T3</text>
+                <path class="mv-line" d="M88 119H110" marker-end="url(#dsparkArrow)"></path>
+                <path class="mv-line" d="M228 119H250" marker-end="url(#dsparkArrow)"></path>
+                <path class="mv-line" d="M364 119H386" marker-end="url(#dsparkArrow)"></path>
+                <text class="mv-small" x="260" y="161" text-anchor="middle">一次核验可前进多个 token；净收益取决于接受率、核验成本与调度开销</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>原来的限制：</strong>标准自回归 Decode 每轮生成一个 token，再把它追加到上下文后调用下一轮。生成越长，串行次数越多，小 batch 时设备算力也很难被充分利用。</p>
+              <p><strong>设计带来的变化：</strong>DSpark 先生成多个候选，再依据置信度决定验证深度。主模型接受正确前缀后，可从首个不匹配位置继续，因此净收益取决于接受率、验证成本和额外调度开销。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>DFlash、采样与调度在昇腾算子目录中已有对应实现；本次公开材料聚焦机制与算子路径，接受率、单位 token 成本和端到端加速比可按目标负载补测。</p>
+          </article>
+
+          <article class="mechanism-card model">
+            <div class="mechanism-head">
+              <span class="mechanism-no">05</span>
+              <div class="mechanism-title-wrap">
+                <h4>SWA bounded replay：不要重算已经失效的历史</h4>
+                <span class="mechanism-kind">模型级 · KV Cache</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">缓存恢复时只重放足够覆盖当前注意窗口的最短后缀，而不是把完整 Prompt 或整段历史 KV 再处理一遍。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 164" role="img" aria-labelledby="swaVisualTitle swaVisualDesc">
+                <title id="swaVisualTitle">SWA bounded replay 有界重放示意</title>
+                <desc id="swaVisualDesc">长历史中只有覆盖滑动窗口和最大回溯长度的后缀需要重放，窗口外历史不再进入本次恢复计算。</desc>
+                <defs>
+                  <marker id="swaArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#a96d16"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="16">KV 历史时间线</text>
+                <rect class="mv-muted" x="24" y="38" width="166" height="34" rx="4"></rect>
+                <rect class="mv-soft" x="190" y="38" width="150" height="34" rx="4"></rect>
+                <rect class="mv-box" x="340" y="38" width="100" height="34" rx="4"></rect>
+                <rect class="mv-soft" x="446" y="38" width="50" height="34" rx="4"></rect>
+                <text class="mv-small" x="107" y="59" text-anchor="middle">窗口外历史</text>
+                <text class="mv-small" x="265" y="59" text-anchor="middle">SWA 可见窗口</text>
+                <text class="mv-small" x="390" y="59" text-anchor="middle">最近上下文</text>
+                <text class="mv-small" x="471" y="59" text-anchor="middle">当前</text>
+                <line class="mv-dash" x1="200" y1="29" x2="436" y2="29"></line>
+                <text class="mv-kicker" x="318" y="24" text-anchor="middle">保留后缀</text>
+                <line x1="24" y1="94" x2="436" y2="94" stroke="#a34735" stroke-width="8" stroke-linecap="round"></line>
+                <text class="mv-small" x="230" y="116" text-anchor="middle">完整重放：读取并重算更长历史</text>
+                <line x1="286" y1="130" x2="436" y2="130" stroke="#a96d16" stroke-width="8" stroke-linecap="round"></line>
+                <path d="M436 124V140" stroke="#a96d16" stroke-width="1.5" marker-end="url(#swaArrow)"></path>
+                <text class="mv-small" x="361" y="154" text-anchor="middle">有界重放：只处理必要后缀</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>原来的限制：</strong>通用缓存恢复如果不知道模型使用滑动窗口，通常会选择完整重放来保证正确性。窗口外的 token 已不影响当前输出，却仍要消耗 KV 读取、搬运和 Prefill 算力。</p>
+              <p><strong>设计带来的变化：</strong>Decoder Prefill 只重放必要的有界后缀。V4.1 默认保留 140 tokens，并要求覆盖 SWA 窗口和最大回溯长度；收益大小取决于窗口配置、复用率与缓存命中。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>回放长度是明确配置，机制可审计；公开材料聚焦实现路径，不同缓存命中率下的时延与吞吐曲线可按目标场景测试。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="mechanism-group">
+        <div class="mechanism-group-head">
+          <span class="mechanism-group-index">03</span>
+          <div>
+            <h3>最后把等待与数据搬运移出关键路径</h3>
+            <p>即使每段计算都已经并行，CPU 排批、MoE 中间结果写回和多 kernel 同步仍会让 NPU 停下来。调度与算子融合解决的是这部分系统开销。</p>
+          </div>
+        </div>
+
+        <div class="mechanism-grid">
+          <article class="mechanism-card schedule">
+            <div class="mechanism-head">
+              <span class="mechanism-no">06</span>
+              <div class="mechanism-title-wrap">
+                <h4>异步批调度：下一批在上一批执行时准备好</h4>
+                <span class="mechanism-kind">调度 · CPU / NPU 重叠</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">CPU 不再等 NPU 做完这一批才开始排下一批；请求检查、batch 拼装和元数据准备被藏进设备执行时间。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 166" role="img" aria-labelledby="asyncVisualTitle asyncVisualDesc">
+                <title id="asyncVisualTitle">异步批调度 CPU 与 NPU 时间重叠示意</title>
+                <desc id="asyncVisualDesc">CPU 在 NPU 执行当前 batch 时准备下一 batch，使排批与设备执行沿同一时间轴重叠。</desc>
+                <defs>
+                  <marker id="asyncArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#51605e"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="16">同一时间轴</text>
+                <line class="mv-line" x1="70" y1="22" x2="486" y2="22" marker-end="url(#asyncArrow)"></line>
+                <text class="mv-small" x="70" y="38">CPU</text>
+                <text class="mv-small" x="70" y="94">NPU</text>
+                <rect class="mv-soft" x="70" y="48" width="120" height="30" rx="4"></rect>
+                <rect class="mv-soft" x="190" y="48" width="120" height="30" rx="4"></rect>
+                <rect class="mv-soft" x="310" y="48" width="120" height="30" rx="4"></rect>
+                <text class="mv-text" x="130" y="68" text-anchor="middle">准备 Batch N</text>
+                <text class="mv-text" x="250" y="68" text-anchor="middle">准备 Batch N+1</text>
+                <text class="mv-text" x="370" y="68" text-anchor="middle">准备 Batch N+2</text>
+                <rect class="mv-muted" x="70" y="104" width="120" height="30" rx="4"></rect>
+                <rect class="mv-box" x="190" y="104" width="120" height="30" rx="4"></rect>
+                <rect class="mv-box" x="310" y="104" width="120" height="30" rx="4"></rect>
+                <text class="mv-small" x="130" y="124" text-anchor="middle">等待首批</text>
+                <text class="mv-text" x="250" y="124" text-anchor="middle">执行 Batch N</text>
+                <text class="mv-text" x="370" y="124" text-anchor="middle">执行 Batch N+1</text>
+                <line class="mv-dash" x1="190" y1="42" x2="190" y2="142"></line>
+                <line class="mv-dash" x1="310" y1="42" x2="310" y2="142"></line>
+                <line class="mv-dash" x1="430" y1="42" x2="430" y2="142"></line>
+                <text class="mv-small" x="310" y="158" text-anchor="middle">准备 N+1 与执行 N 同时发生，设备等待被压到较短区间</text>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>原来的限制：</strong>如果调度器和设备严格轮流工作，每一轮都要先花 CPU 时间准备，再花 NPU 时间执行。Decode 小 batch 执行很短时，排批等待会占掉更明显的比例。</p>
+              <p><strong>设计带来的变化：</strong>CPU 侧调度与 NPU 执行重叠后，一轮耗时不再简单等于“CPU 时间加 NPU 时间”，而更接近两者中较长的一项。NPU Graph 还能降低 kernel launch 开销；组件级耗时可通过平台 profiling 与预留的 Graph Timer 接口联合分析。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>该调度默认启用，NPU Graph 可捕获和 replay；<code>graph_timer_asc.cpp</code> 已预留统一计时接口，组件级归因可结合目标 CANN profiling 工具完成。</p>
+          </article>
+
+          <article class="mechanism-card schedule">
+            <div class="mechanism-head">
+              <span class="mechanism-no">07</span>
+              <div class="mechanism-title-wrap">
+                <h4>MegaMoE：把多次 kernel 往返接成一条数据流</h4>
+                <span class="mechanism-kind">融合 · MoE 数据路径</span>
+              </div>
+            </div>
+            <p class="mechanism-plain">专家分发、矩阵计算、SwiGLU 与结果汇合不再各做各的，而是在同一条数据流中协同布局，减少中间结果的写入和再读取。</p>
+            <figure class="mechanism-visual">
+              <svg viewBox="0 0 520 168" role="img" aria-labelledby="megaVisualTitle megaVisualDesc">
+                <title id="megaVisualTitle">MegaMoE 连续数据流示意</title>
+                <desc id="megaVisualDesc">分步 kernel 需要在阶段之间写回和读取中间张量；MegaMoE 将 dispatch、GEMM、SwiGLU 与 combine 组织为连续数据流。</desc>
+                <defs>
+                  <marker id="megaArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                    <path d="M0 0L10 5L0 10Z" fill="#51605e"></path>
+                  </marker>
+                </defs>
+                <text class="mv-kicker" x="16" y="16">分步 kernel</text>
+                <rect class="mv-box" x="16" y="28" width="96" height="34" rx="4"></rect>
+                <rect class="mv-box" x="148" y="28" width="96" height="34" rx="4"></rect>
+                <rect class="mv-box" x="280" y="28" width="96" height="34" rx="4"></rect>
+                <rect class="mv-box" x="412" y="28" width="92" height="34" rx="4"></rect>
+                <text class="mv-text" x="64" y="50" text-anchor="middle">Dispatch</text>
+                <text class="mv-text" x="196" y="50" text-anchor="middle">GEMM</text>
+                <text class="mv-text" x="328" y="50" text-anchor="middle">SwiGLU</text>
+                <text class="mv-text" x="458" y="50" text-anchor="middle">Combine</text>
+                <path class="mv-line" d="M112 45H140" marker-end="url(#megaArrow)"></path>
+                <path class="mv-line" d="M244 45H272" marker-end="url(#megaArrow)"></path>
+                <path class="mv-line" d="M376 45H404" marker-end="url(#megaArrow)"></path>
+                <text class="mv-small" x="260" y="80" text-anchor="middle">阶段之间写回中间张量，下一步再读取</text>
+                <line class="mv-dash" x1="16" y1="93" x2="504" y2="93"></line>
+                <text class="mv-kicker" x="16" y="113">连续数据流</text>
+                <rect class="mv-soft" x="16" y="123" width="488" height="36" rx="6"></rect>
+                <text class="mv-text" x="72" y="146" text-anchor="middle">Dispatch</text>
+                <text class="mv-text" x="190" y="146" text-anchor="middle">Grouped GEMM</text>
+                <text class="mv-text" x="318" y="146" text-anchor="middle">SwiGLU</text>
+                <text class="mv-text" x="447" y="146" text-anchor="middle">Combine</text>
+                <path class="mv-accent-line" d="M116 141H140" marker-end="url(#megaArrow)"></path>
+                <path class="mv-accent-line" d="M246 141H272" marker-end="url(#megaArrow)"></path>
+                <path class="mv-accent-line" d="M374 141H402" marker-end="url(#megaArrow)"></path>
+              </svg>
+            </figure>
+            <div class="mechanism-copy">
+              <p><strong>原来的限制：</strong>dispatch、grouped GEMM、SwiGLU 和 combine 若分别作为独立 kernel 执行，每一步都要从前一步写回的中间张量重新读取，同时增加 buffer 占用、kernel 启动和同步点。</p>
+              <p><strong>设计带来的变化：</strong>MegaMoE 让通信布局、专家矩阵形状和中间结果传递彼此匹配，从而减少访存往返，并创造通信与计算重叠的机会。它优化的是整条 MoE 数据路径，而不是单次 GEMM 峰值。</p>
+            </div>
+            <p class="mechanism-evidence"><strong>昇腾适配证据：</strong>组件已提供 MegaMoE 路径，实际收益与 DeepEP、grouped GEMM 的协同效率相关；服务级收益可按目标模型与请求分布完成联调测试。</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-title">这些设计真正改变的是什么</div>
+        <p>
+          七项机制分别处理负载不均、串行生成、重复计算、CPU 空等和中间数据往返，但它们共享同一个思路：让模型结构决定并行方式，让调度理解计算阶段，让通信布局匹配专家 GEMM。其中不少技术并非 DeepInfer 首次提出，其差异化来自围绕单一模型和昇腾后端做联合调优。是否形成端到端优势，仍需用目标请求分布和完整服务链路验证。
+        </p>
+      </div>
+    </section>
+
+
+    <section class="report-section page-shell" id="s2">
+      <div class="section-heading">
+        <div class="section-number">02 / 06</div>
+        <div>
+          <h2 class="section-title">DeepInfer 的定位与开源边界</h2>
+          <p class="section-intro">
+            DeepInfer 最初主要基于 vLLM 构建，并吸收了 SGLang 与 TensorRT-LLM 的设计思路，但它并没有走“覆盖尽可能多模型和硬件”的通用路线，而是把模型结构、稀疏注意力、MoE 通信与服务调度作为一个整体来优化。
+          </p>
+        </div>
+      </div>
+
+      <div class="architecture" aria-label="DeepInfer 架构分层">
+        <div class="arch-layer">
+          <div class="arch-layer-name">服务与调度层</div>
+          <div class="arch-components">
+            <span class="arch-chip">异步 batch scheduler</span>
+            <span class="arch-chip">请求生命周期</span>
+            <span class="arch-chip">batch-invariant 设计</span>
+            <span class="arch-chip">确定性采样</span>
+            <span class="arch-chip">结构化输出</span>
+          </div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-name">模型执行层</div>
+          <div class="arch-components">
+            <span class="arch-chip">DeepSeek-V4.1-Flash</span>
+            <span class="arch-chip">DSpark 投机解码</span>
+            <span class="arch-chip">SWA bounded replay</span>
+            <span class="arch-chip">稀疏 Attention 元数据</span>
+            <span class="arch-chip">NPU / CUDA Graph</span>
+          </div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-name">并行与通信层</div>
+          <div class="arch-components">
+            <span class="arch-chip">Attention DP</span>
+            <span class="arch-chip">Balanced CP</span>
+            <span class="arch-chip">MoE EP</span>
+            <span class="arch-chip">EPLB</span>
+            <span class="arch-chip">DeepEP / HCCL</span>
+            <span class="arch-chip">NVLink / UB 网络</span>
+          </div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-name">算子与缓存层</div>
+          <div class="arch-components">
+            <span class="arch-chip">FlashMLA / DSA</span>
+            <span class="arch-chip">DeepGEMM</span>
+            <span class="arch-chip">DeepSelect</span>
+            <span class="arch-chip">TileKernels</span>
+            <span class="arch-chip">Ascend TileLang 算子后端</span>
+            <span class="arch-chip">FP8 / FP4 KV</span>
+          </div>
+        </div>
+        <div class="arch-layer">
+          <div class="arch-layer-name">硬件抽象层</div>
+          <div class="arch-components">
+            <span class="arch-chip">NVIDIA SM100 / CUDA</span>
+            <span class="arch-chip">Ascend 950 / CANN 9.2</span>
+            <span class="arch-chip">torch_npu</span>
+            <span class="arch-chip">HCCL</span>
+            <span class="arch-chip">NUMA / UBCore 拓扑</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <h3>与通用推理框架的根本差异</h3>
+          <p>
+            通用框架通常优先追求模型覆盖、硬件覆盖和接口稳定，因此更多依赖通用算子、通用内存布局和可移植调度。DeepInfer 则只支持 DeepSeek-V4.1-Flash，可以针对模型形状、稀疏模式、专家路由和 KV 格式做专门设计。
+          </p>
+          <p>
+            这类“垂直协同”会产生三个直接收益：第一，算子可以围绕固定形状和固定精度做极致调优；第二，通信可以理解 MoE 路由和 GEMM 时序；第三，调度可以把 Draft Token、SWA 重放和缓存布局共同考虑。代价是泛化能力弱、版本耦合强，且需要为每个硬件代际单独维护后端。
+          </p>
+        </div>
+        <div>
+          <div class="callout info">
+            <div class="callout-title">一句话理解 DeepInfer</div>
+            <p>
+              它不是“另一个 vLLM”，更像一个为 DeepSeek V4.1 量身定制的推理参考实现与极限优化集合。与 vLLM / SGLang 的比较，不应只看 API 和通用功能数量，而应看特定模型在特定硬件上的端到端 Pareto 前沿。
+            </p>
+          </div>
+          <div class="callout">
+            <div class="callout-title">开源边界：推理引擎核心与完整服务栈</div>
+            <p>
+              README 明确说明 DeepInfer 支撑 DeepSeek 大规模生产服务，同时将本开源版本定位为离线推理与规模化服务核心能力。KV Cache 系统、VE / Prefill / Decode 分离、跨 DP 副本负载均衡归入完整服务系统，由外层组件承接。因此本次代码范围聚焦引擎核心与相关算子；跨实例缓存、请求编排和副本路由对应外层服务能力。
+            </p>
+            <p>
+              <strong>deepseek-recipe 不是这三项的补齐件。</strong>它负责 API 协议转换、Prompt 渲染、Tokenizer 编解码和流式输出解析；调用方仍须提供模型推理、工具执行与 HTTP 传输。
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h3>开源组件能力边界核对</h3>
+      <div class="table-wrap">
+        <table class="wide-table boundary-table">
+          <thead>
+            <tr>
+              <th>能力</th>
+              <th>当前开源材料</th>
+              <th>开源版覆盖方式</th>
+              <th>技术含义</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>引擎核心与离线推理</td>
+              <td>DeepInfer 提供模型执行、并行通信、算子、采样与离线推理路径</td>
+              <td><span class="tag measured">核心路径覆盖</span></td>
+              <td>覆盖模型执行主路径；在线服务治理由外层服务系统承接</td>
+            </tr>
+            <tr>
+              <td>对外 API 与 Token 处理</td>
+              <td>deepseek-recipe 提供 Chat Completions、Responses、Messages 转换，Prompt / Token 编解码与流式解析</td>
+              <td><span class="tag measured">表示层适配</span></td>
+              <td>与推理后端组合；调度、缓存和副本路由由对应服务层承载</td>
+            </tr>
+            <tr>
+              <td>KV Cache 服务系统</td>
+              <td>引擎提供缓存初始化、Paged KV 加载和保存钩子；README 将完整缓存系统归入外层服务</td>
+              <td><span class="tag measured">接口已预留</span></td>
+              <td>单引擎缓存接口已具备；跨实例存储、复用、迁移与淘汰由服务系统扩展</td>
+            </tr>
+            <tr>
+              <td>P/D 服务编排</td>
+              <td>README 称多数引擎功能已实现；源码提供 P/D 初始化与 KV 保存虚函数钩子</td>
+              <td><span class="tag measured">编排接口预留</span></td>
+              <td>请求编排、实例发现、传输、恢复与容量治理由外层服务系统承接</td>
+            </tr>
+            <tr>
+              <td>跨 DP 副本负载均衡</td>
+              <td>公开 README 将其归入完整服务系统能力</td>
+              <td><span class="tag measured">路由层承接</span></td>
+              <td>属于跨实例路由问题，可由服务路由层统一实现</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-wrap">
+        <table class="wide-table comparison-table">
+          <thead>
+            <tr>
+              <th>设计维度</th>
+              <th>通用推理框架常见策略</th>
+              <th>DeepInfer 策略</th>
+              <th>技术收益 / 约束</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>模型范围</td>
+              <td>多模型、多模态、广泛兼容</td>
+              <td>当前聚焦 DeepSeek-V4.1-Flash</td>
+              <td>可做模型级协同；跨模型复用需另行适配</td>
+            </tr>
+            <tr>
+              <td>Attention</td>
+              <td>通用 PagedAttention / FlashAttention 接口</td>
+              <td>围绕 DSA 稀疏索引、FP8 / FP4 KV 与固定 head 形状优化</td>
+              <td>稀疏场景上限高；非目标模型不适用</td>
+            </tr>
+            <tr>
+              <td>MoE 通信</td>
+              <td>通用 all-to-all 与集合通信</td>
+              <td>DeepEP 与 MegaMoE，把 dispatch、grouped GEMM、SwiGLU、combine 协同考虑</td>
+              <td>可降低中间数据往返；调试与部署复杂</td>
+            </tr>
+            <tr>
+              <td>执行调度</td>
+              <td>通用连续批处理</td>
+              <td>异步调度、DSpark、置信度验证、SWA 有界重放</td>
+              <td>针对生成负载减少空泡与重算；依赖模型语义</td>
+            </tr>
+            <tr>
+              <td>硬件后端</td>
+              <td>统一抽象、渐进优化</td>
+              <td>NVIDIA 与昇腾分别维护算子、布局和集合通信路径</td>
+              <td>硬件利用率高；维护成本与版本矩阵更大</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="report-section page-shell" id="s3">
+      <div class="section-heading">
+        <div class="section-number">03 / 06</div>
+        <div>
+          <h2 class="section-title">昇腾适配全景与实现深度</h2>
+          <p class="section-intro">
+            昇腾路径在构建、设备发现、运行时环境、通信、算子与 CI 六个层面都有独立实现。分析重点不仅是“能否运行”，还包括不同精度与内存接口对应的实现路径，以及由外层生产服务系统承载的能力。
+          </p>
+        </div>
+      </div>
+
+      <div class="node-grid">
+        <article class="node">
+          <div class="node-label">LAYER 01 · BUILD</div>
+          <h4>双加速器构建</h4>
+          <p><span class="mini-code">DEEPINFER_ACCELERATOR=ascend</span> 选择 `requirements-ascend.txt` 与 `NpuExtension`。</p>
+          <p>公共 C++ 调度器之外加入 `asc_utils.cpp` 和 `graph_timer_asc.cpp`，说明昇腾拥有独立编译产物。</p>
+        </article>
+        <article class="node">
+          <div class="node-label">LAYER 02 · RUNTIME</div>
+          <h4>torch_npu 平台运行时</h4>
+          <p>`transfer_to_npu` 将大量 CUDA 风格调用映射到 NPU；固定 TileLang 目标为 `ascend`，避免误探测为 CUDA。</p>
+          <p>配置 HCCL 缓冲与超时、可扩展显存段，并用 `aclrtHostRegisterV2` 固定主机内存。</p>
+        </article>
+        <article class="node">
+          <div class="node-label">LAYER 03 · TOPOLOGY</div>
+          <h4>NPU 与 NUMA 感知</h4>
+          <p>通过 `/dev/davinci*`、`/sys/class/ubcore` 和 `npu-smi` 发现设备、UB 实体与 NUMA 关系。</p>
+          <p>这意味着框架不只是调用单卡算子，而是尝试把进程、CPU 与 NPU 拓扑绑定。</p>
+        </article>
+        <article class="node">
+          <div class="node-label">LAYER 04 · COLLECTIVE</div>
+          <h4>HCCL 与 DeepEP-Ascend</h4>
+          <p>分布式后端为 `hccl`。DeepEP-Ascend 使用 HCCL / HCOMM、UBMEM、URMA 与 DeepJIT。</p>
+          <p>支持 EP dispatch / combine、FP8 dispatch 与延迟 epilogue；PP、Engram、Bucket 处于持续完善路径，使用前按目标版本核对。</p>
+        </article>
+        <article class="node">
+          <div class="node-label">LAYER 05 · KERNELS</div>
+          <h4>Ascend TileLang 算子后端</h4>
+          <p>覆盖 KV、采样、DFlash、SWA、CP、视觉与结构化输出。</p>
+          <p>FP8 scale 类型在昇腾为 `int16`，NVIDIA 为 `int32`，说明数据布局 ABI 已平台化。</p>
+        </article>
+        <article class="node">
+          <div class="node-label">LAYER 06 · GRAPH &amp; CI</div>
+          <h4>图执行与观测能力分层</h4>
+          <p>NPU Graph 可捕获和 replay；NPU Graph Timer 已保留统一接口，平台事件实现可按目标 CANN 版本接入。</p>
+          <p>离线推理测试覆盖 2 节点 × 8 NPU，采用 EP16 / CP8 并行配置。</p>
+        </article>
+      </div>
+
+      <h3>昇腾实现覆盖与后续扩展</h3>
+      <div class="gap-list">
+        <article class="gap-item">
+          <h4>EPLB 在线权重 shuffle <span class="tag inferred">接口扩展</span></h4>
+          <p>路由、负载统计与重排计算已具备；在线权重 shuffle 当前沿用 GPU 单机 IPC 路径，昇腾侧可沿平台对称内存接口继续扩展。</p>
+        </article>
+        <article class="gap-item">
+          <h4>Sampler 场景 TopK <span class="tag inferred">兼容路径</span></h4>
+          <p>DeepSelect 的昇腾路径覆盖 BF16；需要 FP32 TopK 且返回 value 时由 `torch.topk` 承接。两条路径保持功能可用，后续可针对高频 Decode 增加专用实现。</p>
+        </article>
+        <article class="gap-item">
+          <h4>Graph 内细粒度计时 <span class="tag inferred">观测接入</span></h4>
+          <p>`graph_timer_asc.cpp` 已定义事件、同步、图句柄与计时接口；当前快照接入平台事件实现前，组件级耗时可使用 CANN profiling 工具补充。</p>
+        </article>
+        <article class="gap-item">
+          <h4>FlashMLA 算子范围 <span class="tag inferred">目标范围</span></h4>
+          <p>昇腾覆盖 V4.1 稀疏 Attention 的 Prefill 与 Decode；Dense MHA 及 fused norm-RoPE-attn-RoPE-cast 位于 CUDA 后端。</p>
+        </article>
+        <article class="gap-item">
+          <h4>完整推理服务系统 <span class="tag inferred">外层系统</span></h4>
+          <p>README 说明生产环境已具备 KV Cache 系统、VE / Prefill / Decode 分离服务编排和跨 DP replica 负载均衡。开源快照聚焦引擎核心；缓存加载路径与 P/D 虚函数钩子提供继续集成的接口。</p>
+        </article>
+        <article class="gap-item">
+          <h4>通信性能测试口径 <span class="tag inferred">配置相关</span></h4>
+          <p>DeepEP-Ascend 的高带宽数据来自 950DT、验证版 HDK 与外部 Clos 网络；生产部署可按实际 HDK、固件和网络拓扑复测对应带宽。</p>
+        </article>
+      </div>
+
+      <div class="diagram-wrap">
+        <svg class="diagram" viewBox="0 0 1080 420" role="img" aria-labelledby="ascendFlowTitle ascendFlowDesc">
+          <title id="ascendFlowTitle">DeepInfer 昇腾适配调用链</title>
+          <desc id="ascendFlowDesc">从请求、调度、模型执行、通信与算子到昇腾 950 硬件的分层调用链，并标注四条可继续扩展的接口。</desc>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#51605e"></path>
+            </marker>
+            <style>
+              .flow-box { fill: #fffef9; stroke: #b9beb7; stroke-width: 1.2; }
+              .flow-title { fill: #1c2726; font: 700 15px sans-serif; }
+              .flow-sub { fill: #51605e; font: 11px sans-serif; }
+              .flow-num { fill: #0e6b61; font: 700 10px monospace; }
+              .flow-line { stroke: #51605e; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+              .flow-zone { fill: rgba(14, 107, 97, 0.05); stroke: #0e6b61; stroke-dasharray: 4 4; }
+              .flow-risk { fill: #e1eaf2; stroke: #315f87; stroke-width: 1; }
+              .flow-risk-text { fill: #315f87; font: 700 10px sans-serif; }
+            </style>
+          </defs>
+          <rect class="flow-zone" x="20" y="116" width="1040" height="118" rx="6"></rect>
+          <text x="38" y="100" fill="#0e6b61" font-size="11" font-weight="700">DEEPINFER RUNTIME</text>
+
+          <rect class="flow-box" x="42" y="146" width="154" height="62" rx="5"></rect>
+          <text class="flow-num" x="56" y="166">01</text>
+          <text class="flow-title" x="56" y="184">请求与批调度</text>
+          <text class="flow-sub" x="56" y="199">异步调度 · 结构化输出</text>
+
+          <rect class="flow-box" x="244" y="146" width="154" height="62" rx="5"></rect>
+          <text class="flow-num" x="258" y="166">02</text>
+          <text class="flow-title" x="258" y="184">模型执行</text>
+          <text class="flow-sub" x="258" y="199">DSpark · SWA · Graph</text>
+
+          <rect class="flow-box" x="446" y="146" width="154" height="62" rx="5"></rect>
+          <text class="flow-num" x="460" y="166">03</text>
+          <text class="flow-title" x="460" y="184">并行与通信</text>
+          <text class="flow-sub" x="460" y="199">DP · CP · EP · EPLB</text>
+
+          <rect class="flow-box" x="648" y="146" width="154" height="62" rx="5"></rect>
+          <text class="flow-num" x="662" y="166">04</text>
+          <text class="flow-title" x="662" y="184">算子与缓存</text>
+          <text class="flow-sub" x="662" y="199">MLA · GEMM · TileLang</text>
+
+          <rect class="flow-box" x="850" y="146" width="182" height="62" rx="5"></rect>
+          <text class="flow-num" x="864" y="166">05</text>
+          <text class="flow-title" x="864" y="184">昇腾 950</text>
+          <text class="flow-sub" x="864" y="199">CUBE · VECTOR · UB · L1</text>
+
+          <line class="flow-line" x1="196" y1="177" x2="238" y2="177"></line>
+          <line class="flow-line" x1="398" y1="177" x2="440" y2="177"></line>
+          <line class="flow-line" x1="600" y1="177" x2="642" y2="177"></line>
+          <line class="flow-line" x1="802" y1="177" x2="844" y2="177"></line>
+
+          <rect class="flow-box" x="244" y="280" width="154" height="58" rx="5"></rect>
+          <text class="flow-title" x="258" y="303">DeepEP-Ascend</text>
+          <text class="flow-sub" x="258" y="320">HCCL · UBMEM · URMA</text>
+
+          <rect class="flow-box" x="446" y="280" width="154" height="58" rx="5"></rect>
+          <text class="flow-title" x="460" y="303">DeepGEMM-Ascend</text>
+          <text class="flow-sub" x="460" y="320">BF16 · FP8 · FP4 · MegaMoE</text>
+
+          <rect class="flow-box" x="648" y="280" width="154" height="58" rx="5"></rect>
+          <text class="flow-title" x="662" y="303">FlashMLA / DeepSelect</text>
+          <text class="flow-sub" x="662" y="320">DSA · TopK</text>
+
+          <line class="flow-line" x1="523" y1="212" x2="321" y2="274"></line>
+          <line class="flow-line" x1="523" y1="212" x2="523" y2="274"></line>
+          <line class="flow-line" x1="523" y1="212" x2="725" y2="274"></line>
+
+          <rect class="flow-risk" x="42" y="365" width="225" height="34" rx="4"></rect>
+          <text class="flow-risk-text" x="54" y="386">扩展接口：EPLB 在线 shuffle</text>
+          <rect class="flow-risk" x="286" y="365" width="245" height="34" rx="4"></rect>
+          <text class="flow-risk-text" x="298" y="386">兼容路径：Sampler FP32 TopK</text>
+          <rect class="flow-risk" x="550" y="365" width="262" height="34" rx="4"></rect>
+          <text class="flow-risk-text" x="562" y="386">观测接入：Graph 内细粒度计时</text>
+          <rect class="flow-risk" x="831" y="365" width="201" height="34" rx="4"></rect>
+          <text class="flow-risk-text" x="843" y="386">外层系统：完整服务栈</text>
+        </svg>
+        <div class="diagram-caption">图 1：昇腾路径的调用链与当前开源快照中的扩展接口。</div>
+      </div>
+    </section>
+
+    <section class="report-section page-shell" id="s4">
+      <div class="section-heading">
+        <div class="section-number">04 / 06</div>
+        <div>
+          <h2 class="section-title">计算架构与芯片内数据流</h2>
+          <p class="section-intro">
+            DeepInfer 的昇腾优化不是把 GPU kernel 直接翻译为 NPU 代码，而是围绕昇腾的异构流水重新组织数据搬运、矩阵计算、向量变换和跨核同步。其设计重点是把 CUBE Core 持续保持在有效计算状态。
+          </p>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <h3>Prefill：计算受限，目标打满 CUBE</h3>
+          <p>
+            Prefill 阶段一次处理较多 query token，矩阵乘工作量足够大。FlashMLA 的昇腾实现为每个 AI Core 分配 64 个 query head，采用 1 CUBE + 2 VECTOR，把 softmax、反量化、ND2NZ 和 FixPipe 搬运分摊到两个 Vector Core。
+          </p>
+          <p>
+            流水上采用“当前块 QK、上一块 PV、后续块预取”的交错方式，使 CUBE 不等待 softmax；skip-scale 只在 online softmax 的最大值偏移超过阈值时执行 O 重缩放，减少 FixPipe 和向量计算。
+          </p>
+        </div>
+        <div>
+          <h3>Decode：数据与搬运更敏感</h3>
+          <p>
+            Decode 每步 query token 少、KV 历史长，算子更容易受 KV 读取、FP8 / FP4 反量化、索引 gather 和 FixPipe 影响。昇腾 Decode 达到 360 TFLOPS、约 83% 峰值，低于 Prefill 的 95%，与该结构性差异一致。
+          </p>
+          <p>
+            因此 DeepInfer 将 KV 的 data 与 scale 按 token 相邻存储，减少 MTE2 请求；使用 gather2 合并两 token 搬运；并在 UB 中完成 ND 到 NZ 的高吞吐转换。
+          </p>
+        </div>
+      </div>
+
+      <h3>八个关键微架构优化</h3>
+      <div class="optimization-list">
+        <article class="optimization">
+          <div class="optimization-mark">ND</div>
+          <div>
+            <h4>ND → NZ 片上转换</h4>
+            <p>稀疏 KV 无法在 GM → L1 搬运时顺路完成 layout 变换，因此先进入 UB，再由 SIMD VF 完成转换，以避免 L2 访存合并失效。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">KV</div>
+          <div>
+            <h4>Token 交错 KV 布局</h4>
+            <p>把每个 token 的 data 和 scale 相邻放置，使一次搬运可以同时取得二者，降低 Decode 的 MTE2 请求数和地址开销。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">L1</div>
+          <div>
+            <h4>双 L1 bank 均衡</h4>
+            <p>把 Q、K、V 等张量拆分到两个 L1 bank，避免单 bank 带宽成为矩阵流水瓶颈，使 CUBE 的输入供给更稳定。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">SF</div>
+          <div>
+            <h4>昇腾专用 scale 布局</h4>
+            <p>FP8 scale 使用 `int16` 成对打包，并以 MN-major 布局存放；这与 NVIDIA `int32` 路径不同，是为昇腾硬件效率服务的数据 ABI。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">SS</div>
+          <div>
+            <h4>Skip-scale 与跨核同步</h4>
+            <p>通过 SS buffer 与 cross-core flag 在 VECTOR、CUBE 间传递“是否重缩放”，减少不必要的 FixPipe、UB 和向量运算。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">G2</div>
+          <div>
+            <h4>gather2 合并搬运</h4>
+            <p>用一次 MTE2 请求搬运两个稀疏 token，降低 issue queue 压力，避免大量细小 gather 请求阻塞搬运管线。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">IC</div>
+          <div>
+            <h4>指令缓存控制</h4>
+            <p>使用硬件循环、谨慎展开与函数内联，避免 CUBE / VECTOR / SIMD VF 的小容量指令缓存频繁换入换出。</p>
+          </div>
+        </article>
+        <article class="optimization">
+          <div class="optimization-mark">FP</div>
+          <div>
+            <h4>FixPipe 感知流水</h4>
+            <p>把输出 accumulator 放在 UB，按块执行 FixPipe 搬出与 VECTOR 累加，避免在 L0C 上通过额外矩阵乘完成 rescale。</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="report-section page-shell" id="s5">
+      <div class="section-heading">
+        <div class="section-number">05 / 06</div>
+        <div>
+          <h2 class="section-title">性能数据与来源</h2>
+          <p class="section-intro">
+            公开性能数据来自 DeepInfer README 及其随仓库组件文档：FlashMLA 给出稀疏 Attention 吞吐，DeepGEMM-Ascend 给出矩阵计算吞吐，DeepEP-Ascend 给出专家并行通信带宽。
+          </p>
+        </div>
+      </div>
+
+      <div class="performance-grid">
+        <div class="perf-block">
+          <div class="perf-title">FlashMLA / DeepGEMM-Ascend 计算性能 <span class="tag measured">公开实测</span></div>
+          <div class="perf-bars">
+            <div class="perf-row">
+              <div class="perf-name">BF16 Dense GEMM</div>
+              <div class="perf-track"><span style="--value: 99.8%; --color: var(--teal);"></span></div>
+              <div class="perf-value"><strong>431 TFLOPS</strong><small>峰值 432 · 99.8%</small></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">FP8 × FP8 GEMM</div>
+              <div class="perf-track"><span style="--value: 99.5%; --color: var(--teal);"></span></div>
+              <div class="perf-value"><strong>861 TFLOPS</strong><small>峰值 865 · 99.5%</small></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">FP4 × FP4 GEMM</div>
+              <div class="perf-track"><span style="--value: 98.3%; --color: var(--teal);"></span></div>
+              <div class="perf-value"><strong>1701 TFLOPS</strong><small>峰值 1730 · 98.3%</small></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">稀疏 Attn Prefill</div>
+              <div class="perf-track"><span style="--value: 95%; --color: var(--amber);"></span></div>
+              <div class="perf-value"><strong>410 TFLOPS</strong><small>参考峰值 432 · 95%</small></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">稀疏 Attn Decode</div>
+              <div class="perf-track"><span style="--value: 83%; --color: var(--amber);"></span></div>
+              <div class="perf-value"><strong>360 TFLOPS</strong><small>参考峰值 432 · 83%</small></div>
+            </div>
+          </div>
+          <p class="score-footnote">数据来源：FlashMLA README 的 Ascend 950 组件数据；DeepGEMM-Ascend README 的 BF16、FP8、FP4 GEMM 结果。</p>
+        </div>
+
+        <div class="perf-block secondary">
+          <div class="perf-title">DeepEP-Ascend 通信带宽 <span class="tag measured">公开实测</span></div>
+          <div class="perf-bars">
+            <div class="perf-row">
+              <div class="perf-name">EP8 dispatch</div>
+              <div class="perf-track"><span style="--value: 94%; --color: var(--blue);"></span></div>
+              <div class="perf-value"><strong>373–375 GB/s</strong></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">EP8 combine</div>
+              <div class="perf-track"><span style="--value: 87%; --color: var(--blue);"></span></div>
+              <div class="perf-value"><strong>345–347 GB/s</strong></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">EP64 dispatch</div>
+              <div class="perf-track"><span style="--value: 82%; --color: var(--blue);"></span></div>
+              <div class="perf-value"><strong>323–327 GB/s</strong></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">EP128 dispatch</div>
+              <div class="perf-track"><span style="--value: 80%; --color: var(--blue);"></span></div>
+              <div class="perf-value"><strong>313–320 GB/s</strong></div>
+            </div>
+            <div class="perf-row">
+              <div class="perf-name">EP128 combine</div>
+              <div class="perf-track"><span style="--value: 70%; --color: var(--amber);"></span></div>
+              <div class="perf-value"><strong>272–278 GB/s</strong></div>
+            </div>
+          </div>
+          <p class="score-footnote">数据来源：DeepEP-Ascend README 的 EP8、EP64、EP128 dispatch / combine 带宽结果。</p>
+        </div>
+      </div>
+
+      <h3>性能数据来源</h3>
+      <div class="source-list">
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/FlashMLA" target="_blank" rel="noreferrer">FlashMLA / README.md</a></div>
+          <div class="source-purpose">Prefill 410 TFLOPS，达到 432 TFLOPS 参考峰值的 95%；Decode 360 TFLOPS，利用率 83%。</div>
+          <div class="source-type">组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepGEMM-Ascend" target="_blank" rel="noreferrer">DeepGEMM-Ascend / README.md</a></div>
+          <div class="source-purpose">BF16 431 TFLOPS；FP8 861 TFLOPS；FP4 1701 TFLOPS。</div>
+          <div class="source-type">组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepEP-Ascend" target="_blank" rel="noreferrer">DeepEP-Ascend / README.md</a></div>
+          <div class="source-purpose">EP8 dispatch 373–375 GB/s、combine 345–347 GB/s；EP64 dispatch 323–327 GB/s；EP128 dispatch 313–320 GB/s、combine 272–278 GB/s。</div>
+          <div class="source-type">组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/README.md" target="_blank" rel="noreferrer">DeepInfer / README.md</a></div>
+          <div class="source-purpose">NVIDIA 系统级 Pareto 数据使用 4 张 SM100 执行 Prefill、64 张 SM100 执行 Decode。</div>
+          <div class="source-type">官方仓库文档</div>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="report-section page-shell" id="s6">
+      <div class="section-heading">
+        <div class="section-number">06 / 06</div>
+        <div>
+          <h2 class="section-title">源码证据与术语</h2>
+        </div>
+      </div>
+
+      <h3>主要源码证据</h3>
+      <div class="source-list">
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/README.md" target="_blank" rel="noreferrer">README.md</a></div>
+          <div class="source-purpose">明确 DeepInfer 支撑 DeepSeek 大规模生产服务；本开源版本提供离线推理与规模化服务核心能力；KV Cache 系统、VE / Prefill / Decode 分离、跨 DP 副本负载均衡归入完整服务系统范围。</div>
+          <div class="source-type">官方仓库文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/deepseek-recipe/blob/935817c66f5d6e64838f419692545f06787e485f/README.zh.md" target="_blank" rel="noreferrer">deepseek-recipe / README.zh.md</a></div>
+          <div class="source-purpose">官方说明其为 Rust 库及 Python bindings，负责 API 请求/响应转换、Prompt 渲染、Tokenizer 编解码、流式解析与工具调用；调用方必须提供模型推理、工具执行和 HTTP 传输。示例服务使用 mock inference，不包含 KV Cache、P/D 编排或副本负载均衡。</div>
+          <div class="source-type">配套组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deepinfer/engine/llm_engine.py" target="_blank" rel="noreferrer">deepinfer/engine/llm_engine.py</a></div>
+          <div class="source-purpose">存在 `_init_cache`、`init_pd_split`、`do_save_kvcache`、`pe_prepare_save_kvcache`、`pe_do_save_kvcache` 等缓存与 P/D 接口；这些虚函数构成服务编排的接入点，完整编排与容量治理由外层服务系统承载。</div>
+          <div class="source-type">引擎源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deepinfer/platform.py" target="_blank" rel="noreferrer">deepinfer/platform.py</a></div>
+          <div class="source-purpose">HCCL、`asc` TileLang 后端、torch_npu 映射、ACL 主机内存固定、FP8 scale 类型与 NPU 环境配置。</div>
+          <div class="source-type">运行时源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deep_cluster/hardware/ascend.py" target="_blank" rel="noreferrer">deep_cluster/hardware/ascend.py</a></div>
+          <div class="source-purpose">通过 davinci 设备、ubcore sysfs 与 npu-smi 发现设备、UB 实体和 NUMA 拓扑。</div>
+          <div class="source-type">硬件发现源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/setup.py" target="_blank" rel="noreferrer">setup.py</a><br><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/build.sh" target="_blank" rel="noreferrer">build.sh</a></div>
+          <div class="source-purpose">`NpuExtension`、昇腾专用 C++ 源码、`DEEPINFER_ACCELERATOR` 构建选择与依赖安装。</div>
+          <div class="source-type">构建源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deepinfer/model_executor/eplb/__init__.py" target="_blank" rel="noreferrer">deepinfer/model_executor/eplb/__init__.py</a></div>
+          <div class="source-purpose">EPLB 统计与周期重排；`_initialize_shuffle` 将单机 IPC 路径限定在 GPU，并标注平台对称内存接口的扩展位置。</div>
+          <div class="source-type">并行调度源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deepinfer/npu_ops/deep_select.py" target="_blank" rel="noreferrer">deepinfer/npu_ops/deep_select.py</a></div>
+          <div class="source-purpose">Sampler 的 BF16 TopK 走 DeepSelect；FP32 且需返回 value 时由 `torch.topk` 兼容路径承接。</div>
+          <div class="source-type">NPU 兼容源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/csrc/graph_timer/graph_timer_asc.cpp" target="_blank" rel="noreferrer">csrc/graph_timer/graph_timer_asc.cpp</a></div>
+          <div class="source-purpose">NPU Graph Timer 的统一接口定义；平台事件实现可按目标 CANN 工具链继续接入。</div>
+          <div class="source-type">C++ 运行时源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/blob/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/tests/models/test_offline_inference.py" target="_blank" rel="noreferrer">tests/models/test_offline_inference.py</a></div>
+          <div class="source-purpose">昇腾离线推理使用 2 节点 × 8 NPU，采用 EP16 与 CP8 并行配置。</div>
+          <div class="source-type">测试源码</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepInfer/tree/774ce244b87cc0eb8d4b94ab9f5de2ab22049f01/deepinfer/model_executor/layers/tilelang_ops/asc" target="_blank" rel="noreferrer">deepinfer/model_executor/layers/tilelang_ops/asc/</a></div>
+          <div class="source-purpose">Ascend TileLang 算子覆盖 KV、采样、DFlash、SWA、CP、视觉与结构化输出。</div>
+          <div class="source-type">算子源码目录</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepGEMM-Ascend" target="_blank" rel="noreferrer">vendor/DeepGEMM-Ascend/README.md</a></div>
+          <div class="source-purpose">BF16 / FP8 / FP4 GEMM、MQA logits、MegaMoE、scale 布局以及 950DT 组件性能。</div>
+          <div class="source-type">随仓库组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepEP-Ascend" target="_blank" rel="noreferrer">vendor/DeepEP-Ascend/README.md</a></div>
+          <div class="source-purpose">EP dispatch / combine 带宽、16K tokens/rank 测试条件、验证版 HDK 配置口径与能力演进路径。</div>
+          <div class="source-type">随仓库组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/FlashMLA" target="_blank" rel="noreferrer">vendor/FlashMLA/README.md</a><br><a href="https://github.com/deepseek-ai/FlashMLA/blob/main/docs/20260930-ascend-prefill-deep-dive-zh.md" target="_blank" rel="noreferrer">昇腾稀疏 Attention 技术说明</a></div>
+          <div class="source-purpose">Prefill 410 TFLOPS、Decode 360 TFLOPS，以及 1C2V、ND2NZ、skip-scale、双 L1 bank、icache 与 FixPipe 设计。</div>
+          <div class="source-type">随仓库组件文档</div>
+        </div>
+        <div class="source-row">
+          <div class="source-path"><a href="https://github.com/deepseek-ai/DeepSelect" target="_blank" rel="noreferrer">vendor/DeepSelect/README.md</a></div>
+          <div class="source-purpose">昇腾 TopK 支持 BF16 输入与 int32 index；FP32 Sampler 由兼容路径承接。</div>
+          <div class="source-type">随仓库组件文档</div>
+        </div>
+      </div>
+
+      <h3>术语表</h3>
+      <dl class="glossary">
+        <div class="term"><dt>DSA</dt><dd>DeepSeek Sparse Attention，按索引只关注部分 KV token 的稀疏注意力。</dd></div>
+        <div class="term"><dt>CUBE / VECTOR</dt><dd>昇腾 AI Core 内的矩阵计算与向量计算执行单元。</dd></div>
+        <div class="term"><dt>UB / L1 / L0C</dt><dd>分别为统一向量缓冲、矩阵输入缓存和矩阵累加结果存储。</dd></div>
+        <div class="term"><dt>MTE2 / MTE3 / FixPipe</dt><dd>全局到片上、片上到 L1、矩阵结果搬出的关键数据搬运管线。</dd></div>
+        <div class="term"><dt>ND / NZ</dt><dd>常见行主序布局与昇腾矩阵计算偏好的分形布局，需要片上转换。</dd></div>
+        <div class="term"><dt>EP</dt><dd>Expert Parallel，MoE 专家分布在不同 rank 上的并行方式。</dd></div>
+        <div class="term"><dt>EPLB</dt><dd>Expert Parallel Load Balancing，根据负载重排专家放置。</dd></div>
+        <div class="term"><dt>CP</dt><dd>Context Parallel，将长上下文切分到多个 rank。</dd></div>
+        <div class="term"><dt>P/D 分离</dt><dd>Prefill 与 Decode 分别部署和调度，以匹配不同计算特征。</dd></div>
+        <div class="term"><dt>KV Cache 服务</dt><dd>跨请求、实例和层级管理 KV 的存储、复用、迁移与淘汰；区别于单个引擎内的 KV tensor 或分页加载接口。</dd></div>
+        <div class="term"><dt>deepseek-recipe</dt><dd>DeepSeek 开源的 API 协议适配与 Prompt / Token 编解码组件，不是推理引擎或服务编排系统。</dd></div>
+        <div class="term"><dt>TTFT / TPOT</dt><dd>首 token 延迟与后续每 token 输出时间，是推理 SLA 核心指标。</dd></div>
+        <div class="term"><dt>MFU</dt><dd>Model FLOPs Utilization，模型有效计算占硬件峰值算力的比例。</dd></div>
+        <div class="term"><dt>验证版 HDK</dt><dd>用于工程验证的硬件开发套件配置；此处特指非公开商用的手工配置。</dd></div>
+        <div class="term"><dt>HCCL / HCOMM</dt><dd>昇腾集合通信与底层通信组件。</dd></div>
+        <div class="term"><dt>URMA / UBMEM</dt><dd>DeepEP-Ascend 使用的远端内存访问与统一总线内存相关能力。</dd></div>
+        <div class="term"><dt>TFLOPS</dt><dd>每秒万亿次浮点运算，是吞吐单位；利用率等于实测 TFLOPS 除以对应精度的理论峰值。</dd></div>
+        <div class="term"><dt>GB/s</dt><dd>每秒十亿字节，用于描述显存、集合通信或网络的数据搬运带宽。</dd></div>
+      </dl>
+
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const progress = document.getElementById("progressLine");
+      const sections = [...document.querySelectorAll(".report-section[id]")];
+      let ticking = false;
+
+      function updateProgress() {
+        const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
+        progress.style.width = `${Math.min(100, Math.max(0, ratio * 100))}%`;
+        ticking = false;
+      }
+
+      window.addEventListener("scroll", () => {
+        if (!ticking) {
+          window.requestAnimationFrame(updateProgress);
+          ticking = true;
+        }
+      }, { passive: true });
+
+      updateProgress();
+
+      if ("IntersectionObserver" in window) {
+        const observer = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            const link = document.querySelector(`.toc-link[href="#${entry.target.id}"]`);
+            if (!link) continue;
+            link.style.color = entry.isIntersecting ? "var(--teal)" : "";
+            link.style.background = entry.isIntersecting ? "rgba(220, 236, 232, 0.42)" : "";
+          }
+        }, { rootMargin: "-25% 0px -65% 0px", threshold: 0 });
+        sections.forEach((section) => observer.observe(section));
+      }
+    })();
+  </script>
+</body>
+</html>
