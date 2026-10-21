@@ -53,7 +53,7 @@ MoE 模型包含大量专家。专家并行把不同专家分布到不同 rank�
 
 DeepEP-Ascend 负责昇腾上的分发与汇合，并接入 HCCL、HCOMM、UBMEM 和 URMA 等通信能力。它的价值来自两件事同时成立：专家计算扩展到更多设备，跨设备通信成本得到控制。
 
-![MoE EP 与 DeepEP 分发汇合示意](https://i-blog.csdnimg.cn/direct/53c136880db284498f51ee120a0a2c6665ff42edaa3bf0ab7959194e9383eb62.png)
+![MoE EP 与 DeepEP 分发汇合示意](https://i-blog.csdnimg.cn/img_convert/085dcd9bca9d2da0dc0812e1e8302b4b.png)
 
 公开验证覆盖 EP128。这里的 EP128 表示 128 个专家并行 rank，不是 128 个专家。公开数据中，dispatch 峰值约为 313–320 GB/s。
 
@@ -71,7 +71,7 @@ EPLB 先观察真实 Token 的负载，再计算新的专家布局，并通过�
 
 DSpark 先生成多个轻量候选 Token，再由主模型一次核验。主模型接受正确前缀后，一次迭代可以前进多个 Token。实际收益取决于候选接受率、核验成本和额外调度开销。
 
-![DSpark 多 Token 草稿与主模型核验示意](https://i-blog.csdnimg.cn/direct/57777484003c283ccdec31550c3a14ca734696736a219da96ee0ba0825be15ff.png)
+![DSpark 多 Token 草稿与主模型核验示意](https://i-blog.csdnimg.cn/img_convert/798cbb36e0399cc498966d62dba2d2a4.png)
 
 昇腾算子目录中已经包含 DFlash、采样和相关调度路径，说明该机制已进入硬件后端实现，而不只停留在模型语义层。
 
@@ -81,7 +81,7 @@ DSpark 先生成多个轻量候选 Token，再由主模型一次核验。主模�
 
 SWA bounded replay 只重放覆盖当前注意窗口和最大回溯长度的必要后缀。V4.1 默认保留 140 个 Token，具体收益取决于窗口配置、缓存复用率和命中率。
 
-![SWA bounded replay 有界重放示意](https://i-blog.csdnimg.cn/direct/e8993429fe4f5188b20e4feaa24e7016c1165d9fbf8b9f83a61095886404f67e.png)
+![SWA bounded replay 有界重放示意](https://i-blog.csdnimg.cn/img_convert/ac7c5b2c86b4c326e377c1fbefa01cab.png)
 
 ### 6. 异步批调度：下一批在上一批执行时准备好
 
@@ -89,7 +89,7 @@ SWA bounded replay 只重放覆盖当前注意窗口和最大回溯长度的必�
 
 异步调度让 CPU 在 NPU 执行当前 batch 时准备下一批。理想情况下，一轮耗时更接近“CPU 准备时间”和“NPU 执行时间”中较长的一项，而不是两者相加。NPU Graph 还能通过捕获与 replay 降低 kernel 启动开销。
 
-![异步批调度 CPU 与 NPU 时间重叠示意](https://i-blog.csdnimg.cn/direct/03dc9a24d3c12feefd83ba9629704b3e6233a6380b3242feb5ad267217d67cd0.png)
+![异步批调度 CPU 与 NPU 时间重叠示意](https://i-blog.csdnimg.cn/img_convert/efd50067385c0c195daffef2af12522a.png)
 
 ### 7. MegaMoE：把多次 kernel 往返接成一条数据流
 
@@ -97,7 +97,7 @@ dispatch、grouped GEMM、SwiGLU 和 combine 如果分别作为独立 kernel 执
 
 MegaMoE 让通信布局、专家矩阵形状和中间结果传递彼此匹配，减少中间张量的往返，并创造通信与计算重叠的机会。它优化的是整条 MoE 数据路径，而不是单个 GEMM 的峰值。
 
-![MegaMoE 连续数据流示意](https://i-blog.csdnimg.cn/direct/64edd2b15168ac256043f26a72bbda760129fa175e59697da625807458a2bf9e.png)
+![MegaMoE 连续数据流示意](https://i-blog.csdnimg.cn/img_convert/cbe3841fb138116989e7ae2bdef48ea0.png)
 
 ## 三、DeepInfer 与 vLLM、SGLang 的关系
 
@@ -207,7 +207,7 @@ Decode 每步 query Token 少、KV 历史长，更容易受 KV 读取、FP8 / FP
 
 这里的 Prefill 数据应读作：实测 410 TFLOPS，BF16 参考峰值为 432 TFLOPS，前者约为后者的 95%。`410` 和 `432` 是两个独立的 TFLOPS 数值，`410 / 432` 不作为比值写法使用。
 
-![FlashMLA 与 DeepGEMM-Ascend 计算性能](https://i-blog.csdnimg.cn/direct/74f56c384e58de655d66c55f4671e0aa350e0752718d3ec3fd1a40db30e6b00b.png)
+![FlashMLA 与 DeepGEMM-Ascend 计算性能](https://i-blog.csdnimg.cn/img_convert/3b3a4d4b3c2950a9da9e578e465a30aa.png)
 
 ### DeepEP-Ascend 通信带宽
 
@@ -217,7 +217,7 @@ Decode 每步 query Token 少、KV 历史长，更容易受 KV 读取、FP8 / FP
 | EP64 | 323–327 GB/s | 未列出 |
 | EP128 | 313–320 GB/s | 272–278 GB/s |
 
-![DeepEP-Ascend 通信带宽](https://i-blog.csdnimg.cn/direct/3b6459af3201ba160b7f84811512c88d3dc4fae49ab18bbda04419c4714b2c40.png)
+![DeepEP-Ascend 通信带宽](https://i-blog.csdnimg.cn/img_convert/aafd5bc2fb64502402e2922aed122f19.png)
 
 DeepEP-Ascend 的公开带宽数据对应 950DT、验证版 HDK 与外部 Clos 网络。不同 HDK、固件和网络拓扑下应重新测量，不能直接外推为任意生产集群的带宽。
 
