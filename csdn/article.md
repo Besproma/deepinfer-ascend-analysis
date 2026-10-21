@@ -4,7 +4,7 @@
 > 分析日期：2026-10-21  
 > 分析范围：并行调度、模型级优化、昇腾适配、芯片内数据流、源码证据与公开性能数据
 
-![DeepInfer 昇腾适配与计算架构分析](images/00-cover.png)
+![DeepInfer 昇腾适配与计算架构分析](https://i-blog.csdnimg.cn/direct/51912d7fd9084bf58fc8d76dfa7bdfa9.png)
 
 DeepInfer 是 DeepSeek 面向 DeepSeek-V4.1-Flash 深度定制的高性能推理框架。它与通用推理框架的主要差别，不是又增加了一套模型接入接口，而是把模型结构、稀疏 Attention、MoE 路由、KV 规则和服务调度放在同一个设计闭环中，并分别实现 NVIDIA 与昇腾后端。
 
@@ -43,7 +43,7 @@ DeepInfer 的核心思路，是让模型已经知道的形状与规则进入执�
 
 Balanced CP 按上下文切分一条请求，并尽量平衡各 rank 的 Token 数和计算量。它扩大单请求可用的计算资源，同时缩小不同 rank 的完成时间差，因此优化的是首 Token 阶段的尾延迟。
 
-![Balanced CP 上下文切分示意](images/mechanism-01.png)
+![Balanced CP 上下文切分示意](https://i-blog.csdnimg.cn/direct/1e53eceba81d4fd7b20027b35a20dd93.png)
 
 昇腾离线 CI 使用 2 节点 × 8 NPU、EP16 / CP8 的并行配置，覆盖了这一组合路径。该配置用于功能验证，不是生产规模的性能结论。
 
@@ -53,7 +53,7 @@ MoE 模型包含大量专家。专家并行把不同专家分布到不同 rank�
 
 DeepEP-Ascend 负责昇腾上的分发与汇合，并接入 HCCL、HCOMM、UBMEM 和 URMA 等通信能力。它的价值来自两件事同时成立：专家计算扩展到更多设备，跨设备通信成本得到控制。
 
-![MoE EP 与 DeepEP 分发汇合示意](images/mechanism-02.png)
+![MoE EP 与 DeepEP 分发汇合示意](https://i-blog.csdnimg.cn/direct/53c136880db284498f51ee120a0a2c6665ff42edaa3bf0ab7959194e9383eb62.png)
 
 公开验证覆盖 EP128。这里的 EP128 表示 128 个专家并行 rank，不是 128 个专家。公开数据中，dispatch 峰值约为 313–320 GB/s。
 
@@ -63,7 +63,7 @@ DeepEP-Ascend 负责昇腾上的分发与汇合，并接入 HCCL、HCOMM、UBMEM
 
 EPLB 先观察真实 Token 的负载，再计算新的专家布局，并通过重排压缩最忙 rank 的排队时间。当前实现已经覆盖负载统计、方案求解和周期重排；在线权重迁移保留平台对称内存接口，便于继续利用昇腾的统一总线能力。
 
-![EPLB 负载统计与专家重排示意](images/mechanism-03.png)
+![EPLB 负载统计与专家重排示意](https://i-blog.csdnimg.cn/direct/c2efc98c95b440a0b58345cd9f813c0c.png)
 
 ### 4. DSpark：把一步一 Token 改成一次核验多个
 
@@ -71,7 +71,7 @@ EPLB 先观察真实 Token 的负载，再计算新的专家布局，并通过�
 
 DSpark 先生成多个轻量候选 Token，再由主模型一次核验。主模型接受正确前缀后，一次迭代可以前进多个 Token。实际收益取决于候选接受率、核验成本和额外调度开销。
 
-![DSpark 多 Token 草稿与主模型核验示意](images/mechanism-04.png)
+![DSpark 多 Token 草稿与主模型核验示意](https://i-blog.csdnimg.cn/direct/57777484003c283ccdec31550c3a14ca734696736a219da96ee0ba0825be15ff.png)
 
 昇腾算子目录中已经包含 DFlash、采样和相关调度路径，说明该机制已进入硬件后端实现，而不只停留在模型语义层。
 
@@ -81,7 +81,7 @@ DSpark 先生成多个轻量候选 Token，再由主模型一次核验。主模�
 
 SWA bounded replay 只重放覆盖当前注意窗口和最大回溯长度的必要后缀。V4.1 默认保留 140 个 Token，具体收益取决于窗口配置、缓存复用率和命中率。
 
-![SWA bounded replay 有界重放示意](images/mechanism-05.png)
+![SWA bounded replay 有界重放示意](https://i-blog.csdnimg.cn/direct/e8993429fe4f5188b20e4feaa24e7016c1165d9fbf8b9f83a61095886404f67e.png)
 
 ### 6. 异步批调度：下一批在上一批执行时准备好
 
@@ -89,7 +89,7 @@ SWA bounded replay 只重放覆盖当前注意窗口和最大回溯长度的必�
 
 异步调度让 CPU 在 NPU 执行当前 batch 时准备下一批。理想情况下，一轮耗时更接近“CPU 准备时间”和“NPU 执行时间”中较长的一项，而不是两者相加。NPU Graph 还能通过捕获与 replay 降低 kernel 启动开销。
 
-![异步批调度 CPU 与 NPU 时间重叠示意](images/mechanism-06.png)
+![异步批调度 CPU 与 NPU 时间重叠示意](https://i-blog.csdnimg.cn/direct/03dc9a24d3c12feefd83ba9629704b3e6233a6380b3242feb5ad267217d67cd0.png)
 
 ### 7. MegaMoE：把多次 kernel 往返接成一条数据流
 
@@ -97,7 +97,7 @@ dispatch、grouped GEMM、SwiGLU 和 combine 如果分别作为独立 kernel 执
 
 MegaMoE 让通信布局、专家矩阵形状和中间结果传递彼此匹配，减少中间张量的往返，并创造通信与计算重叠的机会。它优化的是整条 MoE 数据路径，而不是单个 GEMM 的峰值。
 
-![MegaMoE 连续数据流示意](images/mechanism-07.png)
+![MegaMoE 连续数据流示意](https://i-blog.csdnimg.cn/direct/64edd2b15168ac256043f26a72bbda760129fa175e59697da625807458a2bf9e.png)
 
 ## 三、DeepInfer 与 vLLM、SGLang 的关系
 
@@ -112,7 +112,7 @@ DeepInfer 最初主要基于 vLLM 构建，同时吸收了 SGLang、TensorRT-LLM
 
 代价同样明确：模型泛化能力较弱，版本耦合更强，每代硬件都需要维护独立实现。
 
-![DeepInfer 分层架构](images/02-architecture.png)
+![DeepInfer 分层架构](https://i-blog.csdnimg.cn/direct/5f09d394880a460e9bfc8b7ac1c7f5f1.png)
 
 | 设计维度 | 通用推理框架常见策略 | DeepInfer 策略 | 技术含义 |
 | --- | --- | --- | --- |
@@ -135,7 +135,7 @@ DeepInfer 的昇腾路径在构建、运行时、拓扑、通信、算子和图�
 5. **算子层**：Ascend TileLang 覆盖 KV、采样、DFlash、SWA、CP、视觉与结构化输出。FP8 scale 在昇腾上使用 `int16` 打包，与 NVIDIA 的 `int32` 路径区分。
 6. **图执行与测试层**：NPU Graph 支持捕获和 replay；离线推理 CI 覆盖 2 节点 × 8 NPU。
 
-![DeepInfer 昇腾适配调用链](images/03-ascend-flow.png)
+![DeepInfer 昇腾适配调用链](https://i-blog.csdnimg.cn/direct/5fbae2f4a6f34c54adbf5755c39f9f18.png)
 
 开源快照中，各层已经形成清晰实现路径：
 
@@ -207,7 +207,7 @@ Decode 每步 query Token 少、KV 历史长，更容易受 KV 读取、FP8 / FP
 
 这里的 Prefill 数据应读作：实测 410 TFLOPS，BF16 参考峰值为 432 TFLOPS，前者约为后者的 95%。`410` 和 `432` 是两个独立的 TFLOPS 数值，`410 / 432` 不作为比值写法使用。
 
-![FlashMLA 与 DeepGEMM-Ascend 计算性能](images/05-performance-compute.png)
+![FlashMLA 与 DeepGEMM-Ascend 计算性能](https://i-blog.csdnimg.cn/direct/74f56c384e58de655d66c55f4671e0aa350e0752718d3ec3fd1a40db30e6b00b.png)
 
 ### DeepEP-Ascend 通信带宽
 
@@ -217,7 +217,7 @@ Decode 每步 query Token 少、KV 历史长，更容易受 KV 读取、FP8 / FP
 | EP64 | 323–327 GB/s | 未列出 |
 | EP128 | 313–320 GB/s | 272–278 GB/s |
 
-![DeepEP-Ascend 通信带宽](images/05-performance-communication.png)
+![DeepEP-Ascend 通信带宽](https://i-blog.csdnimg.cn/direct/3b6459af3201ba160b7f84811512c88d3dc4fae49ab18bbda04419c4714b2c40.png)
 
 DeepEP-Ascend 的公开带宽数据对应 950DT、验证版 HDK 与外部 Clos 网络。不同 HDK、固件和网络拓扑下应重新测量，不能直接外推为任意生产集群的带宽。
 
